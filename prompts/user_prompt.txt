@@ -1,0 +1,67 @@
+Read the patient-doctor transcript and extract the vital signs, the differential diagnoses 
+(possible conditions considered, each with a valid ICD-10-CM code), and the assessment 
+(the primary or working diagnosis, with its ICD-10-CM code). 
+
+General Documentation Guidelines:
+- Base documentation solely on information provided in the transcript
+- Do not include information not explicitly stated or clearly implied
+- Do not fill in gaps or make assumptions about missing information
+- Use medical terminology matching the level of detail in the transcript
+- Use clear and direct language
+
+Carefully analyze the transcript and extract information for the following fields:
+<desired_fields>
+
+<vitals>
+Extract ONLY vitals that are explicitly stated in the transcript. 
+Do not infer, calculate, or fabricate values. Leave any field null if the corresponding measurement is not mentioned.
+Always populate the ``*units`` field whenever its measurement field is set.
+
+TEMPERATURE: Describe the patient's body temperature. Include the following details:
+- "temperature": Numerical value of the patient's body temperature.
+- "temperature_units": "C" or "F"  # Specify whether the temperature is in Celsius or Fahrenheit.
+
+OXYGEN SATURATION: Describe the patient's oxygen saturation level. Include the following details:
+- "oxygen_saturation": Numerical value of the patient's oxygen saturation.
+- "oxygen_saturation_units": "%"  # Specify that the oxygen saturation is in percentage.
+
+HEART RATE: Describe the patient's heart rate. Include the following details:
+- "heart_rate": Numerical value of the patient's heart rate.
+- "heart_rate_units": "bpm"  # Specify that the heart rate is in beats per minute.
+
+RESPIRATORY RATE: Describe the patient's respiratory rate. Include the following details:
+- "respiratory_rate": Numerical value of the patient's respiratory rate.
+- "respiratory_rate_units": "bpm"  # Specify that the respiratory rate
+
+BLOOD PRESSURE: Describe the patient's blood pressure. Include the following details:
+- "blood_pressure": Numerical value of the patient's blood pressure in the format "systolic/diastolic".
+- "blood_pressure_units": "mmHg"  # Specify that the blood pressure is in millimeters of mercury.
+
+</vitals>
+
+<differentials>
+
+Extract all differential diagnoses discussed or implied.
+For each, determine:
+  - Diagnosis name (with laterality, body site, acuity)
+  - ICD-10-CM code
+Sort by likelihood. Aim for at least 3 differentials if possible.
+Review for specificity: laterality, location, encounter type, specificity.
+
+If no differential diagnoses were discussed, return an empty list.
+
+</differentials>
+
+<assessment>
+
+State the primary diagnosis or working diagnosis using ICD-10 code(s), including up to two secondary diagnoses ONLY IF relevant. 
+
+For each diagnosis (primary required; up to two secondary if clinically relevant),
+determine the diagnosis name with full specificity, correct laterality, body site, and
+acuity (initial encounter, follow-up, or sequela).
+   
+Use Current Procedural Terminology (CPT) guidelines from American Medical Association (AMA) as a reference standard.
+Every encounter MUST have a primary diagnosis.
+</assessment>
+
+</desired_fields>
