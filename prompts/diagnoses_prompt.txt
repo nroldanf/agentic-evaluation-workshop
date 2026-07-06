@@ -1,0 +1,34 @@
+Read the patient-doctor transcript and extract the differential diagnoses (possible
+conditions considered, each with a valid ICD-10-CM code) and the assessment (the primary
+or working diagnosis, with its ICD-10-CM code).
+
+General Documentation Guidelines:
+- Base documentation solely on information provided in the transcript
+- Do not include information not explicitly stated or clearly implied
+- Do not fill in gaps or make assumptions about missing information
+- Use medical terminology matching the level of detail in the transcript
+- Use clear and direct language
+
+<differentials>
+
+Extract all differential diagnoses discussed or implied.
+For each, determine:
+  - Diagnosis name (with laterality, body site, acuity)
+  - ICD-10-CM code
+Sort by likelihood. Aim for at least 3 differentials if possible.
+Review for specificity: laterality, location, encounter type, specificity.
+
+If no differential diagnoses were discussed, return an empty list.
+
+</differentials>
+
+<assessment>
+
+State the primary diagnosis or working diagnosis using its ICD-10-CM code.
+
+Determine the diagnosis name with full specificity, correct laterality, body site, and
+acuity (initial encounter, follow-up, or sequela).
+
+Every encounter MUST have a primary diagnosis.
+
+</assessment>

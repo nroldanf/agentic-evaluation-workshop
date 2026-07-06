@@ -17,3 +17,6 @@ __marimo__/
 
 # Local environment / secrets
 .env
+
+# Local planning notes
+plan_medical_scribe_agent.md

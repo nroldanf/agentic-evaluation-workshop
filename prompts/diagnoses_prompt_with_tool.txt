@@ -1,0 +1,62 @@
+Read the patient-doctor transcript and extract the differential diagnoses (possible
+conditions considered, each with a valid ICD-10-CM code) and the assessment (the primary
+or working diagnosis, with its ICD-10-CM code).
+
+For every diagnosis you report (both differentials and assessment), you MUST assign the
+ICD-10-CM code using the `search_icd10_codes_batch` tool. Do NOT rely on your own memory
+for ICD-10-CM codes — only use codes returned by the tool.
+
+General Documentation Guidelines:
+- Base documentation solely on information provided in the transcript
+- Do not include information not explicitly stated or clearly implied
+- Do not fill in gaps or make assumptions about missing information
+- Use medical terminology matching the level of detail in the transcript
+- Use clear and direct language
+
+<diagnoses_workflow>
+
+Produce the differential diagnoses and the assessment by following these three steps
+IN ORDER. Do not skip a step, and do not assign any ICD-10-CM code before Step 2.
+
+STEP 1 — Extract initial candidates (no codes yet):
+- Read the transcript and list every candidate diagnosis discussed or implied: both the
+  differential diagnoses and the primary (working) diagnosis for the assessment.
+- Write each as a precise clinical name with full specificity: laterality, body site,
+  acuity (initial encounter, follow-up, or sequela) where the transcript supports it.
+- Do NOT assign ICD-10-CM codes in this step.
+
+STEP 2 — Validate the candidates by searching:
+- Call the `search_icd10_codes_batch` tool EXACTLY ONCE, passing ALL candidate names from
+  Step 1 in a single call. Do not call any tool again after this step.
+- For each candidate, compare the returned codes' descriptions against the candidate's
+  intended meaning and select the ONE code that genuinely matches.
+- Code-selection rules:
+  - You MUST choose an ICD-10-CM code that was LITERALLY returned by the tool. NEVER
+    construct, infer, or extrapolate a code, even if you believe a more specific one exists.
+  - The `diagnosis_name` you output MUST be the EXACT description the tool returned for the
+    chosen code — do NOT paraphrase, embellish, or modify it.
+  - Prefer the most specific matching code the tool returned (correct laterality, body site,
+    and acuity) when the transcript supports that level of detail.
+  - Do NOT blindly take the first/top result: if the top match is a different condition than
+    intended, choose a better one from the list.
+  - If NONE of the returned codes is a genuine match for a candidate, OMIT that candidate
+    entirely rather than forcing a wrong code.
+
+ICD-10 laterality conventions (use when selecting among returned codes):
+- Right = 1, Left = 2, Bilateral = 3, Unspecified = 0 or 9
+- Use "unspecified" only when the transcript truly lacks laterality detail
+- Examples: right eye open-angle glaucoma → H40.021; pain in left foot → M79.672;
+  bilateral acute otitis media → H66.003
+
+STEP 3 — Consolidate the final diagnoses:
+- Reconcile the validated candidates into the final output: merge duplicates, remove any
+  candidate that failed validation in Step 2, and resolve overlaps between differentials
+  and the assessment.
+- differential_diagnoses: the consolidated, validated differentials, sorted by likelihood
+  (most likely first). Use ONLY diagnosis names and codes confirmed via the tool. If no
+  differential diagnoses were discussed, return an empty list.
+- assessment: the consolidated primary/working diagnosis (required), using its
+  tool-validated code and its exact tool-returned description as the diagnosis name.
+  Every encounter MUST have a primary diagnosis.
+
+</diagnoses_workflow>

@@ -85,6 +85,23 @@ class Assessment(Diagnosis):
     """The clinician's primary or working diagnosis for the encounter."""
 
 
+class DiagnosesOutput(BaseModel):
+    """Diagnoses portion of a clinical note (differentials + assessment).
+
+    Used as the focused output schema for the diagnoses node so the model isn't
+    also responsible for vitals in the same pass. Merged with `VitalSigns` into a
+    full `ClinicalNote`.
+    """
+
+    differential_diagnoses: list[DifferentialDiagnosis] = Field(
+        default_factory=list,
+        description="List of possible conditions considered based on the evaluation, including ICD-10 codes.",
+    )
+    assessment: Assessment = Field(
+        description="Primary diagnosis or working diagnosis, including ICD-10 codes.",
+    )
+
+
 class ClinicalNote(BaseModel):
     """Structured clinical note extracted from a patient-doctor transcript."""
 
