@@ -2,7 +2,7 @@
 
 Un agent minimalista de medical-scribe construido con LangGraph. Lee la
 transcripción (transcript) de una consulta médico–paciente, usa un modelo local
-de Ollama (`qwen3.5:4b` por defecto) para extraer una nota clínica estructurada
+de Ollama ([`gemma4:e2b`](https://ollama.com/library/gemma4) por defecto) para extraer una nota clínica estructurada
 y la guarda en `outputs/`. Los signos vitales (vitals) y los diagnósticos se
 extraen mediante nodes (nodos) separados que pueden ejecutarse de forma
 secuencial (por defecto) o en paralelo.
@@ -38,10 +38,16 @@ flowchart LR
 
 ## Prerequisites
 
-1. Instala [Ollama](https://ollama.com) y descarga el modelo:
+Necesitas dos herramientas instaladas localmente:
+
+- **[Ollama](https://ollama.com)** — para ejecutar el modelo local.
+- **[uv](https://docs.astral.sh/uv/)** — para gestionar el entorno y las dependencias de Python.
+
+1. Instala [Ollama](https://ollama.com) y descarga el modelo
+   [`gemma4:e2b`](https://ollama.com/library/gemma4):
 
    ```bash
-   ollama pull qwen3.5:4b
+   ollama pull gemma4:e2b
    ```
 
 2. Instala las dependencias con [uv](https://docs.astral.sh/uv/):
@@ -99,7 +105,7 @@ Consulta todas las opciones con `uv run python agent.py --help`.
 ## Configuration
 
 El modelo de Ollama se configura mediante la variable de entorno
-`OLLAMA_MODEL` (por defecto `qwen3.5:4b`). Defínela en `.env` (ver
+`OLLAMA_MODEL` (por defecto [`gemma4:e2b`](https://ollama.com/library/gemma4)). Defínela en `.env` (ver
 `.env.example`) o de forma inline:
 
 ```bash

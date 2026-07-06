@@ -6,10 +6,6 @@ structured `ClinicalNote`, and saves it to disk via a tool.
 Structured output is handled natively by `create_agent` through the
 `response_format=` parameter: the validated Pydantic instance is returned at
 `result["structured_response"]`.
-
-Prereqs:
-  - Ollama running locally with the model pulled: `ollama pull qwen3.5:4b`
-  - Deps: langchain, langgraph, langchain-ollama (see pyproject.toml)
 """
 
 import argparse
@@ -114,11 +110,12 @@ def search_icd10_codes_batch(diagnosis_names: list[str], limit: int = 10) -> dic
     return search_icd10_batch(diagnosis_names, limit=limit)
 
 
-# The LLM: a local Ollama model. temperature=0 keeps extraction deterministic.
-# The model name is configurable via the OLLAMA_MODEL env var (see .env.example).
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:4b")
-logger.info("Creating Ollama model %r", OLLAMA_MODEL)
-llm = ChatOllama(model=OLLAMA_MODEL, temperature=0)
+# The LLM: a local Ollama model. A low temperature keeps extraction near-deterministic.
+# Both the model name and temperature are configurable via env vars (see .env.example).
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma4:e2b")
+OLLAMA_TEMPERATURE = float(os.getenv("OLLAMA_TEMPERATURE", "0.1"))
+logger.info("Creating Ollama model %r (temperature=%s)", OLLAMA_MODEL, OLLAMA_TEMPERATURE)
+llm = ChatOllama(model=OLLAMA_MODEL, temperature=OLLAMA_TEMPERATURE)
 
 logger.info("Loading system prompt from %s", SYSTEM_PROMPT_PATH)
 system_prompt = SYSTEM_PROMPT_PATH.read_text(encoding="utf-8").strip()
@@ -144,19 +141,18 @@ def build_diagnoses_agent(use_tool: bool):
     """Build the diagnoses agent, giving it the ICD-10 tool only when requested.
 
     Output schema is `DiagnosesOutput` (differentials + assessment) — vitals are
-    handled by a separate node. The structured-output strategy is chosen per mode
-    because the 4B model is reliable with a different one in each:
-      - No tools: the default tool-based strategy (pass the schema directly).
-      - With tools: `ProviderStrategy` (Ollama's native JSON-schema `format`). The
-        default strategy makes structured output a hidden tool that competes with
-        the domain tool, and the small model tends to answer in prose instead —
-        dropping the structured result. Native output coerces the final answer
-        regardless of tool usage.
+    handled by a separate node. Both modes use `ProviderStrategy` (Ollama's native
+    JSON-schema `format`), which grammar-constrains generation to the schema:
+      - With tools: the default tool-based strategy makes structured output a hidden
+        tool that competes with the domain tool, and the small model tends to answer
+        in prose instead — dropping the structured result. Native output coerces the
+        final answer regardless of tool usage.
+      - No tools: the default (tool-based) strategy lets the model emit free-form
+        reasoning before the structured answer, which is slow on a local model.
+        Native output suppresses that and goes straight to the JSON.
     """
     tools = [search_icd10_codes_batch] if use_tool else []
-    response_format = (
-        ProviderStrategy(schema=DiagnosesOutput) if use_tool else DiagnosesOutput
-    )
+    response_format = ProviderStrategy(schema=DiagnosesOutput)
     return create_agent(
         model=llm,
         system_prompt=system_prompt,
