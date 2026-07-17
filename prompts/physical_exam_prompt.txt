@@ -1,0 +1,20 @@
+Extract the Physical Exam (PE) findings from the patient-doctor transcript.
+
+General Documentation Guidelines:
+- Base documentation solely on information provided in the transcript
+- Do not include information not explicitly stated or clearly implied
+- Do not fill in gaps or make assumptions about missing information
+- Use medical terminology matching the level of detail in the transcript
+- Use clear and direct language
+
+Field: Physical Exam (PE)
+Description: Document findings for each body system examined. Prefer clinically appropriate terms, avoiding generic language if possible.
+Format:
+"- [System]: [Findings] [Absence of expected abnormalities]"
+
+For each body system the clinician examined in the transcript, produce one entry with:
+  - system: the body system examined (e.g. "General", "HEENT", "Cardiovascular", "Respiratory").
+  - findings: the documented findings for that system, including the absence of expected abnormalities when stated.
+
+Only include systems for which the transcript reports an examination or finding. If no
+physical exam was performed, return an empty list.

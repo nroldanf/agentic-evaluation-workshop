@@ -3,22 +3,36 @@
 Un agent minimalista de medical-scribe construido con LangGraph. Lee la
 transcripción (transcript) de una consulta médico–paciente, usa un modelo local
 de Ollama ([`gemma4:e2b`](https://ollama.com/library/gemma4) por defecto) para extraer una nota clínica estructurada
-y la guarda en `outputs/`. Los signos vitales (vitals) y los diagnósticos se
-extraen mediante nodes (nodos) separados que pueden ejecutarse de forma
-secuencial (por defecto) o en paralelo.
+y la guarda en `outputs/`. La historia de la enfermedad actual (HPI), los signos
+vitales (vitals), el examen físico (physical exam) y los diagnósticos se extraen
+mediante nodes (nodos) separados que pueden ejecutarse de forma secuencial (por
+defecto) o en paralelo.
 
 ## Arquitectura
 
-Dos nodes extraen la nota: un **vitals node** sin tools (`VitalSigns`) y un
-**diagnoses node** (`DiagnosesOutput`) que opcionalmente puede llamar al tool de
-búsqueda de ICD-10. Sus salidas se combinan en un único `ClinicalNote`.
+Cuatro nodes extraen la nota, cada uno con su propio prompt y schema de salida,
+todos construidos con una única función `build_agent(prompt, response_format,
+tools)`:
+
+- **hpi node** (`HistoryOfPresentIllness`) — redacta la historia de la enfermedad
+  actual como un párrafo narrativo cronológico. Sin tools.
+- **vitals node** (`VitalSigns`) — extrae los signos vitales. Sin tools.
+- **physical exam node** (`PhysicalExam`) — documenta los hallazgos del examen
+  físico agrupados por sistema corporal. Sin tools.
+- **diagnoses node** (`DiagnosesOutput`) — extrae los diagnósticos diferenciales
+  (los 3 más relevantes) y el assessment; opcionalmente llama al tool de búsqueda
+  de ICD-10.
+
+Sus salidas se combinan en un único `ClinicalNote`.
 
 **Secuencial (por defecto):**
 
 ```mermaid
 flowchart LR
-    S([START]) --> V["vitals node<br/>(VitalSigns)"]
-    V --> D["diagnoses node<br/>(DiagnosesOutput)"]
+    S([START]) --> H["hpi node<br/>(HistoryOfPresentIllness)"]
+    H --> V["vitals node<br/>(VitalSigns)"]
+    V --> P["physical exam node<br/>(PhysicalExam)"]
+    P --> D["diagnoses node<br/>(DiagnosesOutput)"]
     D --> E([END])
     D -.->|"--use-tool"| T["search_icd10_codes_batch"]
     T -.-> D
@@ -28,9 +42,13 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    S([START]) --> V["vitals node<br/>(VitalSigns)"]
+    S([START]) --> H["hpi node<br/>(HistoryOfPresentIllness)"]
+    S --> V["vitals node<br/>(VitalSigns)"]
+    S --> P["physical exam node<br/>(PhysicalExam)"]
     S --> D["diagnoses node<br/>(DiagnosesOutput)"]
-    V --> E([END])
+    H --> E([END])
+    V --> E
+    P --> E
     D --> E
     D -.->|"--use-tool"| T["search_icd10_codes_batch"]
     T -.-> D
@@ -56,7 +74,7 @@ Necesitas dos herramientas instaladas localmente:
    uv sync
    ```
 
-## Ejecutar el agent
+## Ejecutar el agente
 
 Ejecuta con el transcript de ejemplo (se muestran los valores por defecto):
 
@@ -89,12 +107,12 @@ uv run python agent.py --use-tool
 
 ### Ejecución secuencial vs. paralela
 
-Por defecto, el vitals node y el diagnoses node se ejecutan de forma
-**secuencial** (una llamada a Ollama a la vez), lo cual es confiable contra un
-único servidor local. Agrega `--parallel` para ejecutarlos de forma concurrente
-— esto requiere un servidor local de Ollama configurado para concurrencia
-(`OLLAMA_NUM_PARALLEL >= 2`); de lo contrario, las llamadas simultáneas pueden
-devolver respuestas vacías.
+Por defecto, los cuatro nodes (hpi, vitals, physical exam y diagnoses) se
+ejecutan de forma **secuencial** (una llamada a Ollama a la vez), lo cual es
+confiable contra un único servidor local. Agrega `--parallel` para ejecutarlos de
+forma concurrente — esto requiere un servidor local de Ollama configurado para
+concurrencia (`OLLAMA_NUM_PARALLEL >= 4`); de lo contrario, las llamadas
+simultáneas pueden devolver respuestas vacías.
 
 ```bash
 uv run python agent.py --parallel
@@ -104,9 +122,18 @@ Consulta todas las opciones con `uv run python agent.py --help`.
 
 ## Configuration
 
-El modelo de Ollama se configura mediante la variable de entorno
-`OLLAMA_MODEL` (por defecto [`gemma4:e2b`](https://ollama.com/library/gemma4)). Defínela en `.env` (ver
-`.env.example`) o de forma inline:
+El comportamiento del agent se configura mediante variables de entorno.
+Defínelas en `.env` (ver `.env.example`) o de forma inline:
+
+- `OLLAMA_MODEL` — el modelo de Ollama a usar (por defecto
+  [`gemma4:e2b`](https://ollama.com/library/gemma4)).
+- `OLLAMA_TEMPERATURE` — temperatura de sampling (por defecto `0.1`; más baja =
+  más determinista).
+- `OLLAMA_TIMEOUT` — timeout por request al servidor de Ollama, en segundos (por
+  defecto `300`). Súbelo si un modelo local lento supera el tiempo límite.
+- `LLM_MAX_RETRIES` — reintentos de una llamada al modelo fallida, p. ej. una
+  respuesta estructurada vacía, antes de rendirse (por defecto `5`; usa backoff
+  exponencial).
 
 ```bash
 OLLAMA_MODEL="llama3.1:8b" uv run python agent.py
@@ -117,14 +144,19 @@ OLLAMA_MODEL="llama3.1:8b" uv run python agent.py
 Todos los prompts se leen desde archivos en `prompts/`, así que puedes editarlos
 sin tocar el código:
 
-- `prompts/system_prompt.txt` — el system prompt del agent (rol/instrucciones).
+- `prompts/system_prompt.txt` — el rol/instrucciones compartidos del scribe; se
+  antepone al prompt de cada node para formar su system prompt.
+- `prompts/hpi_prompt.txt` — las instrucciones para el hpi node (redacción de la
+  historia de la enfermedad actual como párrafo narrativo).
+- `prompts/vitals_prompt.txt` — las instrucciones para el vitals node dedicado.
+- `prompts/physical_exam_prompt.txt` — las instrucciones para el physical exam
+  node (hallazgos por sistema corporal).
 - `prompts/diagnoses_prompt.txt` — las instrucciones de extracción de
-  diagnósticos, combinadas con el transcript en tiempo de ejecución. Puedes
+  diagnósticos (los 3 diferenciales más relevantes + assessment). Puedes
   sobrescribirlo por ejecución con `-d/--diagnoses-prompt`.
 - `prompts/diagnoses_prompt_with_tool.txt` — las instrucciones de extracción de
   diagnósticos usadas cuando `--use-tool` está activo (guían al agent a través
   del tool de ICD-10).
-- `prompts/vitals_prompt.txt` — las instrucciones para el vitals node dedicado.
 
 ## Tracing (opcional)
 

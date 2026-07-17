@@ -11,11 +11,12 @@ General Documentation Guidelines:
 
 <differentials>
 
-Extract all differential diagnoses discussed or implied.
+Extract the differential diagnoses discussed or implied.
 For each, determine:
   - Diagnosis name (with laterality, body site, acuity)
   - ICD-10-CM code
-Sort by likelihood. Aim for at least 3 differentials if possible.
+Sort by likelihood (most likely first) and report only the 3 most relevant
+differentials. If fewer than 3 were discussed, report only those.
 Review for specificity: laterality, location, encounter type, specificity.
 
 If no differential diagnoses were discussed, return an empty list.

@@ -62,6 +62,39 @@ class VitalSigns(BaseModel):
     )
 
 
+class HistoryOfPresentIllness(BaseModel):
+    """The History of Present Illness (HPI) narrative for the encounter."""
+
+    hpi: str = Field(
+        default="",
+        description=(
+            "A single flowing, chronological narrative paragraph describing the "
+            "present illness: chief complaint, onset, duration, intensity, associated "
+            "symptoms, exacerbating/alleviating factors, and treatments attempted."
+        ),
+    )
+
+
+class PhysicalExamFinding(BaseModel):
+    """Documented findings for a single body system examined."""
+
+    system: str = Field(
+        description="The body system examined, e.g. 'Respiratory', 'Cardiovascular', 'HEENT'.",
+    )
+    findings: str = Field(
+        description="Documented findings for that system, including the absence of expected abnormalities when stated.",
+    )
+
+
+class PhysicalExam(BaseModel):
+    """Physical Exam (PE) findings grouped by body system."""
+
+    findings: list[PhysicalExamFinding] = Field(
+        default_factory=list,
+        description="One entry per body system examined during the encounter.",
+    )
+
+
 class Diagnosis(BaseModel):
     """A single diagnosis with its ICD-10 code.
 
@@ -105,9 +138,17 @@ class DiagnosesOutput(BaseModel):
 class ClinicalNote(BaseModel):
     """Structured clinical note extracted from a patient-doctor transcript."""
 
+    hpi: str = Field(
+        default="",
+        description="History of Present Illness narrative for the encounter.",
+    )
     vital_signs: VitalSigns = Field(
         default_factory=VitalSigns,
         description="Vital signs measured during the visit.",
+    )
+    physical_exam: list[PhysicalExamFinding] = Field(
+        default_factory=list,
+        description="Physical exam findings grouped by body system.",
     )
     differential_diagnoses: list[DifferentialDiagnosis] = Field(
         default_factory=list,
