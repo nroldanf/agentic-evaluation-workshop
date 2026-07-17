@@ -1,7 +1,13 @@
 """A minimal LangGraph medical-scribe agent.
 
-Reads a patient-doctor transcript, uses Ollama to extract a
-structured `ClinicalNote`, and saves it to disk via a tool.
+Reads a patient-doctor transcript, uses Ollama to extract a structured
+`ClinicalNote`, and saves it to disk via a tool.
+
+Four focused sub-agents each extract one section of the note — history of present
+illness (HPI), vitals, physical exam, and diagnoses — and their outputs are merged
+into a single `ClinicalNote`. They are all built by one `build_agent(prompt,
+response_format, tools)` helper and run as nodes of a LangGraph `StateGraph`,
+either sequentially (default) or in parallel (`--parallel`).
 
 Structured output is handled natively by `create_agent` through the
 `response_format=` parameter: the validated Pydantic instance is returned at
@@ -18,6 +24,7 @@ from typing import TypedDict
 
 from dotenv import load_dotenv
 from langchain.agents import create_agent
+from langchain.agents.middleware import ModelRetryMiddleware
 from langchain.agents.structured_output import ProviderStrategy
 from langchain.tools import tool
 from langchain_core.runnables import RunnableConfig
@@ -25,7 +32,13 @@ from langchain_ollama import ChatOllama
 from langgraph.graph import END, START, StateGraph
 
 from icd10_search import search_icd10, search_icd10_batch
-from models import ClinicalNote, DiagnosesOutput, VitalSigns
+from models import (
+    ClinicalNote,
+    DiagnosesOutput,
+    HistoryOfPresentIllness,
+    PhysicalExam,
+    VitalSigns,
+)
 
 # Load variables from a local .env file if present (see .env.example).
 load_dotenv()
@@ -60,6 +73,8 @@ SYSTEM_PROMPT_PATH = Path("prompts/system_prompt.txt")
 DIAGNOSES_PROMPT_PATH = Path("prompts/diagnoses_prompt.txt")
 DIAGNOSES_PROMPT_WITH_TOOL_PATH = Path("prompts/diagnoses_prompt_with_tool.txt")
 VITALS_PROMPT_PATH = Path("prompts/vitals_prompt.txt")
+HPI_PROMPT_PATH = Path("prompts/hpi_prompt.txt")
+PHYSICAL_EXAM_PROMPT_PATH = Path("prompts/physical_exam_prompt.txt")
 
 
 @tool
@@ -114,64 +129,107 @@ def search_icd10_codes_batch(diagnosis_names: list[str], limit: int = 10) -> dic
 # Both the model name and temperature are configurable via env vars (see .env.example).
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma4:e2b")
 OLLAMA_TEMPERATURE = float(os.getenv("OLLAMA_TEMPERATURE", "0.1"))
-logger.info("Creating Ollama model %r (temperature=%s)", OLLAMA_MODEL, OLLAMA_TEMPERATURE)
-llm = ChatOllama(model=OLLAMA_MODEL, temperature=OLLAMA_TEMPERATURE)
+# Per-request timeout in seconds for calls to the Ollama server. Small local
+# models can be slow, so this defaults high; raise it further via env var if a
+# model still times out (see .env.example).
+OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "300"))
+logger.info(
+    "Creating Ollama model %r (temperature=%s, timeout=%ss)",
+    OLLAMA_MODEL,
+    OLLAMA_TEMPERATURE,
+    OLLAMA_TIMEOUT,
+)
+llm = ChatOllama(
+    model=OLLAMA_MODEL,
+    temperature=OLLAMA_TEMPERATURE,
+    client_kwargs={"timeout": OLLAMA_TIMEOUT},
+)
+
+# Number of times to retry a failed model call (e.g. an empty structured-output
+# response) before giving up. Configurable via env var (see .env.example).
+# ModelRetryMiddleware retries with exponential backoff on any exception.
+LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "5"))
+logger.info("Model call retries: %d", LLM_MAX_RETRIES)
+
+
+def get_middleware() -> list:
+    """Shared middleware for every agent: retry failed model calls with backoff."""
+    return [ModelRetryMiddleware(max_retries=LLM_MAX_RETRIES)]
 
 logger.info("Loading system prompt from %s", SYSTEM_PROMPT_PATH)
 system_prompt = SYSTEM_PROMPT_PATH.read_text(encoding="utf-8").strip()
 logger.info("Loading vitals prompt from %s", VITALS_PROMPT_PATH)
 vitals_prompt = VITALS_PROMPT_PATH.read_text(encoding="utf-8").strip()
+logger.info("Loading HPI prompt from %s", HPI_PROMPT_PATH)
+hpi_prompt = HPI_PROMPT_PATH.read_text(encoding="utf-8").strip()
+logger.info("Loading physical exam prompt from %s", PHYSICAL_EXAM_PROMPT_PATH)
+physical_exam_prompt = PHYSICAL_EXAM_PROMPT_PATH.read_text(encoding="utf-8").strip()
 
 
 class ScribeState(TypedDict):
     """State for the scribe graph.
 
     Inputs: transcript, diagnoses_prompt, use_tool.
-    Outputs (written by parallel nodes): vital_signs, diagnoses.
+    Outputs (written by parallel nodes): hpi, vital_signs, physical_exam, diagnoses.
     """
 
     transcript: str
     diagnoses_prompt: str
     use_tool: bool
+    hpi: HistoryOfPresentIllness
     vital_signs: VitalSigns
+    physical_exam: PhysicalExam
     diagnoses: DiagnosesOutput
 
 
-def build_diagnoses_agent(use_tool: bool):
-    """Build the diagnoses agent, giving it the ICD-10 tool only when requested.
+def build_agent(prompt: str, response_format, tools: list | None = None):
+    """Build a scribe sub-agent from its task prompt and output schema.
 
-    Output schema is `DiagnosesOutput` (differentials + assessment) — vitals are
-    handled by a separate node. Both modes use `ProviderStrategy` (Ollama's native
-    JSON-schema `format`), which grammar-constrains generation to the schema:
-      - With tools: the default tool-based strategy makes structured output a hidden
-        tool that competes with the domain tool, and the small model tends to answer
-        in prose instead — dropping the structured result. Native output coerces the
-        final answer regardless of tool usage.
-      - No tools: the default (tool-based) strategy lets the model emit free-form
-        reasoning before the structured answer, which is slow on a local model.
-        Native output suppresses that and goes straight to the JSON.
+    Every sub-agent shares the same model, scribe system role, and retry
+    middleware; they differ only in their task `prompt`, `response_format`, and
+    optional `tools`. This single builder keeps them consistent and makes adding a
+    new agent a one-line call.
+
+    Args:
+        prompt: Task instructions for this agent, appended to the shared scribe
+            system role to form the agent's system prompt.
+        response_format: The structured-output target. Pass a bare Pydantic model
+            to use the default tool-based strategy (reliable for tool-free agents),
+            or wrap it in `ProviderStrategy(schema=...)` to use Ollama's native
+            JSON-schema `format` (grammar-constrained generation). Native output is
+            preferred for the diagnoses agent: with tools, the default strategy makes
+            structured output a hidden tool that competes with the domain tool and
+            the small model tends to answer in prose (dropping the result); without
+            tools, it lets the model emit slow free-form reasoning before the JSON.
+        tools: Domain tools to expose, or None for a tool-free agent.
+
+    Returns:
+        A compiled agent whose `invoke` returns the validated instance at
+        `result["structured_response"]`.
     """
-    tools = [search_icd10_codes_batch] if use_tool else []
-    response_format = ProviderStrategy(schema=DiagnosesOutput)
     return create_agent(
         model=llm,
-        system_prompt=system_prompt,
-        tools=tools,
+        system_prompt=f"{system_prompt}\n\n{prompt}",
+        tools=tools or [],
         response_format=response_format,
+        middleware=get_middleware(),
     )
 
 
-def build_vitals_agent():
-    """Build the vitals agent (no tools).
-
-    Output schema is `VitalSigns`. Uses the default tool-based structured-output
-    strategy, which is reliable for a tool-free agent on this model.
-    """
-    return create_agent(
-        model=llm,
-        system_prompt=system_prompt,
-        response_format=VitalSigns,
+def run_agent(agent, transcript: str, config: RunnableConfig):
+    """Invoke a scribe sub-agent over the transcript and return its structured output."""
+    result = agent.invoke(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": f"<transcript>\n{transcript}\n</transcript>",
+                }
+            ]
+        },
+        config=config,
     )
+    return result["structured_response"]
 
 
 def vitals_node(state: ScribeState, config: RunnableConfig) -> dict:
@@ -181,73 +239,84 @@ def vitals_node(state: ScribeState, config: RunnableConfig) -> dict:
     it is also doing the ICD-10 tool workflow in the same pass.
     """
     logger.info("Vitals node: extracting vitals (tool-free)")
-    agent = build_vitals_agent()
-    result = agent.invoke(
-        {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": f"{vitals_prompt}\n\n<transcript>\n{state['transcript']}\n</transcript>",
-                }
-            ]
-        },
-        config=config,
-    )
-    return {"vital_signs": result["structured_response"]}
+    agent = build_agent(vitals_prompt, VitalSigns)
+    return {"vital_signs": run_agent(agent, state["transcript"], config)}
+
+
+def hpi_node(state: ScribeState, config: RunnableConfig) -> dict:
+    """Write the History of Present Illness with a dedicated, tool-free agent."""
+    logger.info("HPI node: writing history of present illness (tool-free)")
+    agent = build_agent(hpi_prompt, HistoryOfPresentIllness)
+    return {"hpi": run_agent(agent, state["transcript"], config)}
+
+
+def physical_exam_node(state: ScribeState, config: RunnableConfig) -> dict:
+    """Extract physical exam findings with a dedicated, tool-free agent."""
+    logger.info("Physical exam node: extracting PE findings (tool-free)")
+    agent = build_agent(physical_exam_prompt, PhysicalExam)
+    return {"physical_exam": run_agent(agent, state["transcript"], config)}
 
 
 def diagnoses_node(state: ScribeState, config: RunnableConfig) -> dict:
-    """Extract and (optionally) tool-validate the differentials and assessment."""
+    """Extract and (optionally) tool-validate the differentials and assessment.
+
+    Uses `ProviderStrategy` (native JSON-schema output) rather than the default
+    tool-based strategy so the structured result survives alongside the ICD-10 tool.
+    """
     use_tool = state["use_tool"]
     logger.info(
         "Diagnoses node: extracting diagnoses, ICD-10 tool %s",
         "enabled" if use_tool else "disabled",
     )
-    agent = build_diagnoses_agent(use_tool)
-    result = agent.invoke(
-        {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": f"{state['diagnoses_prompt']}\n\n<transcript>\n{state['transcript']}\n</transcript>",
-                }
-            ]
-        },
-        config=config,
+    tools = [search_icd10_codes_batch] if use_tool else []
+    agent = build_agent(
+        state["diagnoses_prompt"],
+        ProviderStrategy(schema=DiagnosesOutput),
+        tools=tools,
     )
-    return {"diagnoses": result["structured_response"]}
+    return {"diagnoses": run_agent(agent, state["transcript"], config)}
 
 
 def build_parallel_graph():
-    """Vitals and diagnoses run in parallel, then merge.
+    """The HPI, vitals, physical exam, and diagnoses nodes run in parallel, then merge.
 
-    Needs a local Ollama server configured for concurrency (OLLAMA_NUM_PARALLEL >= 2);
-    otherwise the two simultaneous structured-output calls can return empty responses.
+    Needs a local Ollama server configured for concurrency (OLLAMA_NUM_PARALLEL >= 4);
+    otherwise the four simultaneous structured-output calls can return empty responses.
     Kept for when the server is configured for parallelism.
     """
     builder = StateGraph(ScribeState)
+    builder.add_node("hpi", hpi_node)
     builder.add_node("vitals", vitals_node)
+    builder.add_node("physical_exam", physical_exam_node)
     builder.add_node("diagnoses", diagnoses_node)
     # Fan-out from START (parallel), fan-in to END. The nodes write different
     # state keys, so no reducers are needed.
+    builder.add_edge(START, "hpi")
     builder.add_edge(START, "vitals")
+    builder.add_edge(START, "physical_exam")
     builder.add_edge(START, "diagnoses")
+    builder.add_edge("hpi", END)
     builder.add_edge("vitals", END)
+    builder.add_edge("physical_exam", END)
     builder.add_edge("diagnoses", END)
     return builder.compile()
 
 
 def build_sequential_graph():
-    """Vitals then diagnoses, one Ollama call at a time, then merge.
+    """HPI, then vitals, then physical exam, then diagnoses — one Ollama call at a time.
 
     Reliable against a single local Ollama server (no concurrent requests). The
     nodes write different state keys, so no reducers are needed.
     """
     builder = StateGraph(ScribeState)
+    builder.add_node("hpi", hpi_node)
     builder.add_node("vitals", vitals_node)
+    builder.add_node("physical_exam", physical_exam_node)
     builder.add_node("diagnoses", diagnoses_node)
-    builder.add_edge(START, "vitals")
-    builder.add_edge("vitals", "diagnoses")
+    builder.add_edge(START, "hpi")
+    builder.add_edge("hpi", "vitals")
+    builder.add_edge("vitals", "physical_exam")
+    builder.add_edge("physical_exam", "diagnoses")
     builder.add_edge("diagnoses", END)
     return builder.compile()
 
@@ -260,10 +329,10 @@ def extract_note(
 ) -> ClinicalNote:
     """Run the scribe graph and merge its parallel outputs into a ClinicalNote.
 
-    The vitals node (tool-free) and the diagnoses node (ICD-10 tool when
-    `use_tool`) run either sequentially (default, single local Ollama server) or
-    in parallel (`parallel=True`, requires OLLAMA_NUM_PARALLEL >= 2); their
-    results are combined here.
+    The HPI, vitals, and physical exam nodes (tool-free) and the diagnoses node
+    (ICD-10 tool when `use_tool`) run either sequentially (default, single local
+    Ollama server) or in parallel (`parallel=True`, requires OLLAMA_NUM_PARALLEL
+    >= 4); their results are combined here.
     """
     scribe_graph = (
         build_parallel_graph() if parallel else build_sequential_graph()
@@ -287,7 +356,9 @@ def extract_note(
 
     diagnoses = final["diagnoses"]
     return ClinicalNote(
+        hpi=final["hpi"].hpi,
         vital_signs=final["vital_signs"],
+        physical_exam=final["physical_exam"].findings,
         differential_diagnoses=diagnoses.differential_diagnoses,
         assessment=diagnoses.assessment,
     )
@@ -334,9 +405,9 @@ def parse_args() -> argparse.Namespace:
         "--parallel",
         action="store_true",
         help=(
-            "Run the vitals and diagnoses nodes in parallel instead of "
-            "sequentially. Requires a local Ollama server configured for "
-            "concurrency (OLLAMA_NUM_PARALLEL >= 2)."
+            "Run the HPI, vitals, physical exam, and diagnoses nodes in parallel "
+            "instead of sequentially. Requires a local Ollama server configured for "
+            "concurrency (OLLAMA_NUM_PARALLEL >= 4)."
         ),
     )
     return parser.parse_args()

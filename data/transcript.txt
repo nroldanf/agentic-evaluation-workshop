@@ -26,7 +26,11 @@ Doctor: Have you had anything like this before, or is this new?
 
 Patient: I get maybe one bad chest cold a year, usually in the winter. But this feels heavier than those. And it's July, so the timing's weird.
 
-Doctor: Fair point. Let me ask a few background questions. Do you smoke, or have you in the past?
+Doctor: Fair point. Let me confirm a couple of details before we go on. I've got you down as 58 years old, is that still right?
+
+Patient: Yep, 58. Turned it back in March.
+
+Doctor: Great. Let me ask a few background questions. Do you smoke, or have you in the past?
 
 Patient: I quit about three years ago. Smoked around a pack a day for, oh, fifteen years before that.
 
@@ -42,11 +46,19 @@ Doctor: Good, I've made a note of that. Have you traveled anywhere recently, or 
 
 Patient: My grandkids were over last weekend and a couple of them had colds. Runny noses, the whole deal.
 
-Doctor: That could certainly be relevant. Let me take a listen to your lungs and check your vitals, and then we'll talk about next steps. Can you take a few deep breaths for me?
+Doctor: That could certainly be relevant. Let me examine you and check your vitals, and then we'll talk about next steps. First, just looking at you overall, you're alert and answering all my questions clearly, but you do look a bit tired and flushed. No obvious distress at rest, though.
+
+Patient: Yeah, I feel wrung out.
+
+Doctor: Let me check your head and neck. Can you open your mouth and say "ah"? Okay, your throat looks a little red but I don't see any pus or swelling on your tonsils. Your ears look clear. Let me feel along your neck here... I'm not feeling any enlarged or tender lymph nodes, and no sinus tenderness when I press over your cheeks.
+
+Patient: Okay.
+
+Doctor: Now let me listen to your heart. Take normal breaths for me... Your heart sounds are regular, nice and steady, no extra sounds or murmurs. Good. Now can you take a few slow, deep breaths through your mouth?
 
 Patient: Sure. Like this?
 
-Doctor: That's perfect. Keep going... okay. I'm hearing some crackling on the lower right side, which I want to look into. Let me run through your numbers. Your temperature is 100.8 degrees Fahrenheit. Your oxygen saturation is sitting at 95 percent on room air, which is a touch low for you. Your heart rate is 98 beats per minute, and your breathing is a little quick at 22 breaths per minute. Blood pressure is 138 over 86, so slightly up from your usual, probably because you're not feeling well.
+Doctor: That's perfect. Keep going... okay. I'm hearing some crackles on the lower right side of your chest, and the air movement is a little reduced there compared to the left. The left side sounds clear. No wheezing that I can hear. Let me press on your belly for a second too... soft, no tenderness, that all feels normal. And your legs look fine, no swelling in your ankles. Now let me run through your numbers. Your temperature is 100.8 degrees Fahrenheit. Your oxygen saturation is sitting at 95 percent on room air, which is a touch low for you. Your heart rate is 98 beats per minute, and your breathing is a little quick at 22 breaths per minute. Blood pressure is 138 over 86, so slightly up from your usual, probably because you're not feeling well.
 
 Patient: Is that bad? Should I be worried?
 

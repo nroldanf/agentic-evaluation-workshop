@@ -53,7 +53,8 @@ STEP 3 — Consolidate the final diagnoses:
   candidate that failed validation in Step 2, and resolve overlaps between differentials
   and the assessment.
 - differential_diagnoses: the consolidated, validated differentials, sorted by likelihood
-  (most likely first). Use ONLY diagnosis names and codes confirmed via the tool. If no
+  (most likely first), reporting ONLY the 3 most relevant. If fewer than 3 were discussed,
+  report only those. Use ONLY diagnosis names and codes confirmed via the tool. If no
   differential diagnoses were discussed, return an empty list.
 - assessment: the consolidated primary/working diagnosis (required), using its
   tool-validated code and its exact tool-returned description as the diagnosis name.
