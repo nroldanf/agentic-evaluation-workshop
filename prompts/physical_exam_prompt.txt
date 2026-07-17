@@ -13,7 +13,11 @@ Format:
 "- [System]: [Findings] [Absence of expected abnormalities]"
 
 For each body system the clinician examined in the transcript, produce one entry with:
-  - system: the body system examined (e.g. "General", "HEENT", "Cardiovascular", "Respiratory").
+  - system: the body system examined. It MUST be one of exactly these values:
+    general, heent, neck, cardiovascular, respiratory, gastrointestinal, genitourinary,
+    musculoskeletal, extremities, skin, neurologic, psychiatric.
+    Map each examined system to the closest value in this list (e.g. lungs -> respiratory,
+    heart -> cardiovascular, abdomen -> gastrointestinal). Do not invent other systems.
   - findings: the documented findings for that system, including the absence of expected abnormalities when stated.
 
 Only include systems for which the transcript reports an examination or finding. If no
