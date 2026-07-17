@@ -17,8 +17,11 @@ tools)`:
 - **hpi node** (`HistoryOfPresentIllness`) — redacta la historia de la enfermedad
   actual como un párrafo narrativo cronológico. Sin tools.
 - **vitals node** (`VitalSigns`) — extrae los signos vitales. Sin tools.
-- **physical exam node** (`PhysicalExam`) — documenta los hallazgos del examen
-  físico agrupados por sistema corporal. Sin tools.
+- **physical exam node** (`PhysicalExam`) — documenta los hallazgos **objetivos**
+  del examen físico (lo observado/medido por el clínico, no los síntomas referidos
+  por el paciente), agrupados por sistema corporal. El sistema se restringe a un
+  enum fijo (`PhysicalExamSystem`: general, heent, neck, cardiovascular,
+  respiratory, …). Sin tools.
 - **diagnoses node** (`DiagnosesOutput`) — extrae los diagnósticos diferenciales
   (los 3 más relevantes) y el assessment; opcionalmente llama al tool de búsqueda
   de ICD-10.
@@ -118,6 +121,31 @@ simultáneas pueden devolver respuestas vacías.
 uv run python agent.py --parallel
 ```
 
+### Caching de nodos
+
+Agrega `--cache` para cachear en disco el resultado de cada node. En una
+ejecución posterior con las mismas entradas (mismo transcript, mismo prompt y
+mismo modelo), ese node **omite la llamada al LLM** y devuelve el resultado
+guardado — útil para re-correr el pipeline (p. ej. durante evaluaciones) sin
+pagar de nuevo las llamadas lentas al modelo local.
+
+```bash
+uv run python agent.py --cache
+```
+
+La clave de caché de cada node incluye el transcript, el prompt efectivo de ese
+node (rol del sistema + prompt de la tarea), el modelo y la temperatura. Por eso,
+**editar un prompt re-ejecuta solo el node afectado**; los demás siguen sirviendo
+desde caché. El cache es persistente entre procesos (un `DiskCache` que implementa
+la interfaz `BaseCache` de LangGraph, en `cache.py`), a diferencia del
+`InMemoryCache` integrado, que no sobrevive al proceso.
+
+Para borrar todos los resultados cacheados:
+
+```bash
+uv run python agent.py --clear-cache
+```
+
 Consulta todas las opciones con `uv run python agent.py --help`.
 
 ## Configuration
@@ -134,6 +162,10 @@ Defínelas en `.env` (ver `.env.example`) o de forma inline:
 - `LLM_MAX_RETRIES` — reintentos de una llamada al modelo fallida, p. ej. una
   respuesta estructurada vacía, antes de rendirse (por defecto `5`; usa backoff
   exponencial).
+- `LANGGRAPH_CACHE_DIR` — directorio del cache de nodos en disco, usado con
+  `--cache` (por defecto `.cache/scribe`).
+- `LANGGRAPH_CACHE_TTL` — TTL en segundos para los resultados cacheados
+  (opcional; vacío = sin expiración, un hit se sirve solo con entradas idénticas).
 
 ```bash
 OLLAMA_MODEL="llama3.1:8b" uv run python agent.py
