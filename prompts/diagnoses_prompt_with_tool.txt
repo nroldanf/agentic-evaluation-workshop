@@ -6,13 +6,6 @@ For every diagnosis you report (both differentials and assessment), you MUST ass
 ICD-10-CM code using the `search_icd10_codes_batch` tool. Do NOT rely on your own memory
 for ICD-10-CM codes — only use codes returned by the tool.
 
-General Documentation Guidelines:
-- Base documentation solely on information provided in the transcript
-- Do not include information not explicitly stated or clearly implied
-- Do not fill in gaps or make assumptions about missing information
-- Use medical terminology matching the level of detail in the transcript
-- Use clear and direct language
-
 <diagnoses_workflow>
 
 Produce the differential diagnoses and the assessment by following these three steps

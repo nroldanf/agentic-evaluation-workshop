@@ -1,29 +1,20 @@
 Extract the Physical Exam (PE) findings from the patient-doctor transcript.
 
-General Documentation Guidelines:
-- Base documentation solely on information provided in the transcript
-- Do not include information not explicitly stated or clearly implied
-- Do not fill in gaps or make assumptions about missing information
-- Use medical terminology matching the level of detail in the transcript
-- Use clear and direct language
-
-Field: Physical Exam (PE)
-Description: Document findings for each body system examined. Prefer clinically appropriate terms, avoiding generic language if possible.
-Format:
-"- [Findings] [Absence of expected abnormalities]"
+Document only what the healthcare provider directly observed or measured on physical
+examination. Prefer clinically appropriate terms over generic language.
 
 Do NOT include subjective symptoms reported by the patient (e.g., pain, nausea, dizziness).
-Only document what the healthcare provider directly observed or measured on physical
-examination. Patient-denied symptoms are NOT physical exam findings, even when asked during
-the examination.
+Patient-denied symptoms are NOT physical exam findings, even when the clinician asked about
+them during the examination.
 
 For each body system the clinician examined in the transcript, produce one entry with:
-  - system: the body system examined. It MUST be one of exactly these values:
+  - system: the body system examined. It MUST be exactly one of these values:
     general, heent, neck, cardiovascular, respiratory, gastrointestinal, genitourinary,
     musculoskeletal, extremities, skin, neurologic, psychiatric.
     Map each examined system to the closest value in this list (e.g. lungs -> respiratory,
     heart -> cardiovascular, abdomen -> gastrointestinal). Do not invent other systems.
-  - findings: the documented findings for that system, including the absence of expected abnormalities when stated.
+  - findings: the documented findings for that system, stated in clinical terms, including
+    the absence of expected abnormalities when the clinician noted it.
 
 Only include systems for which the transcript reports an examination or finding. If no
 physical exam was performed, return an empty list.
