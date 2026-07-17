@@ -1,19 +1,12 @@
 Write the History of Present Illness (HPI) from the patient-doctor transcript.
 
-General Documentation Guidelines:
-- Base documentation solely on information provided in the transcript
-- Do not include information not explicitly stated or clearly implied
-- Do not fill in gaps or make assumptions about missing information
-- Use medical terminology matching the level of detail in the transcript
-- Use clear and direct language
-
 Write a chronological narrative using one of the following openings:
   - If age is stated: "Patient is a [age]-year-old presenting with [chief complaint and onset context if stated]."
   - If age is not stated but life stage is evident: "Patient is a [child/infant/adolescent/adult] presenting with [chief complaint and onset context if stated]."
   - If neither is determinable: "Patient presents with [chief complaint and onset context if stated]." Never substitute any other physical descriptor (such as weight or height) in the opening.
 
-Include onset, duration, intensity, all associated symptoms (including prodromal or antecedent symptoms that preceded the chief complaint), exacerbating/alleviating factors, and treatments attempted.
+Trace the illness in chronological order, and include onset, duration, intensity, all
+associated symptoms (including prodromal or antecedent symptoms that preceded the chief
+complaint), exacerbating/alleviating factors, and treatments attempted.
 
-Rules:
-- Mention the chronological progression of the illness or condition.
-- Write as a flowing paragraph, not bullet points.
+Write the HPI as a single flowing paragraph, not bullet points.
