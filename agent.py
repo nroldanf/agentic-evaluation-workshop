@@ -184,12 +184,12 @@ _cache_ttl_env = os.getenv("LANGGRAPH_CACHE_TTL", "").strip()
 # Empty/unset means no expiry: a hit is served only for truly identical inputs.
 CACHE_TTL = int(_cache_ttl_env) if _cache_ttl_env else None
 
-# Modules the cache's serde may (de)serialize: our Pydantic result models.
+# Types the cache's serde may (de)serialize: every class defined in `models`
+# (the Pydantic result models AND enums they nest, e.g. PhysicalExamSystem).
 _MODEL_ALLOWLIST = [
     ("models", name)
     for name in dir(models_module)
     if isinstance(getattr(models_module, name), type)
-    and issubclass(getattr(models_module, name), models_module.BaseModel)
     and getattr(models_module, name).__module__ == "models"
 ]
 

@@ -10,7 +10,12 @@ General Documentation Guidelines:
 Field: Physical Exam (PE)
 Description: Document findings for each body system examined. Prefer clinically appropriate terms, avoiding generic language if possible.
 Format:
-"- [System]: [Findings] [Absence of expected abnormalities]"
+"- [Findings] [Absence of expected abnormalities]"
+
+Do NOT include subjective symptoms reported by the patient (e.g., pain, nausea, dizziness).
+Only document what the healthcare provider directly observed or measured on physical
+examination. Patient-denied symptoms are NOT physical exam findings, even when asked during
+the examination.
 
 For each body system the clinician examined in the transcript, produce one entry with:
   - system: the body system examined. It MUST be one of exactly these values:
