@@ -15,6 +15,7 @@ Structured output is handled natively by `create_agent` through the
 """
 
 import argparse
+import asyncio
 import json
 import logging
 import os
@@ -29,8 +30,12 @@ from langchain.agents.structured_output import ProviderStrategy
 from langchain.tools import tool
 from langchain_core.runnables import RunnableConfig
 from langchain_ollama import ChatOllama
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import CachePolicy
 
+import models as models_module
+from cache import DiskCache
 from icd10_search import search_icd10, search_icd10_batch
 from models import (
     ClinicalNote,
@@ -142,6 +147,8 @@ logger.info(
 llm = ChatOllama(
     model=OLLAMA_MODEL,
     temperature=OLLAMA_TEMPERATURE,
+    keep_alive="5m",
+    num_predict=1024,
     client_kwargs={"timeout": OLLAMA_TIMEOUT},
 )
 
@@ -164,6 +171,71 @@ logger.info("Loading HPI prompt from %s", HPI_PROMPT_PATH)
 hpi_prompt = HPI_PROMPT_PATH.read_text(encoding="utf-8").strip()
 logger.info("Loading physical exam prompt from %s", PHYSICAL_EXAM_PROMPT_PATH)
 physical_exam_prompt = PHYSICAL_EXAM_PROMPT_PATH.read_text(encoding="utf-8").strip()
+
+
+# --- Node-level caching (opt-in via --cache) ------------------------------
+# A DiskCache persists each node's result across processes, so re-running with
+# unchanged inputs skips the (slow, local) LLM call. The cache key includes the
+# transcript, the node's effective prompt, the model, and the temperature (see
+# make_cache_key), so editing a prompt or switching models re-runs only the
+# affected node(s); the rest stay warm. Configurable via env vars (see .env.example).
+CACHE_DIR = os.getenv("LANGGRAPH_CACHE_DIR", ".cache/scribe")
+_cache_ttl_env = os.getenv("LANGGRAPH_CACHE_TTL", "").strip()
+# Empty/unset means no expiry: a hit is served only for truly identical inputs.
+CACHE_TTL = int(_cache_ttl_env) if _cache_ttl_env else None
+
+# Modules the cache's serde may (de)serialize: our Pydantic result models.
+_MODEL_ALLOWLIST = [
+    ("models", name)
+    for name in dir(models_module)
+    if isinstance(getattr(models_module, name), type)
+    and issubclass(getattr(models_module, name), models_module.BaseModel)
+    and getattr(models_module, name).__module__ == "models"
+]
+
+
+def build_cache() -> DiskCache:
+    """Build the persistent disk-cache backend for node-level caching."""
+    serde = JsonPlusSerializer(allowed_msgpack_modules=_MODEL_ALLOWLIST)
+    return DiskCache(CACHE_DIR, serde=serde)
+
+
+def make_cache_key(task_prompt: str | None = None):
+    """Build a node cache-key function keyed on the inputs that affect its output.
+
+    Keys on the transcript, the node's effective prompt (shared system role + task
+    prompt), the model, and the temperature — plus the ICD-10 tool flag for the
+    diagnoses node. LangGraph namespaces cache entries per node, so editing one
+    prompt busts only that node's cache; the others stay warm.
+
+    Pass the fixed task prompt for the HPI/vitals/physical-exam nodes; pass None
+    for the diagnoses node, whose prompt and tool flag come from the run state.
+    """
+
+    def key_func(val: dict) -> str:
+        if task_prompt is None:  # diagnoses node: prompt + tool flag are in state
+            prompt = val.get("diagnoses_prompt", "")
+            use_tool = val.get("use_tool", False)
+        else:
+            prompt, use_tool = task_prompt, False
+        payload = {
+            "transcript": val.get("transcript", ""),
+            "system_prompt": system_prompt,
+            "prompt": prompt,
+            "use_tool": use_tool,
+            "model": OLLAMA_MODEL,
+            "temperature": OLLAMA_TEMPERATURE,
+        }
+        return json.dumps(payload, sort_keys=True, ensure_ascii=False)
+
+    return key_func
+
+
+def _cache_policy(enabled: bool, task_prompt: str | None) -> CachePolicy | None:
+    """A CachePolicy for a node when caching is enabled, else None (no caching)."""
+    if not enabled:
+        return None
+    return CachePolicy(ttl=CACHE_TTL, key_func=make_cache_key(task_prompt))
 
 
 class ScribeState(TypedDict):
@@ -216,9 +288,9 @@ def build_agent(prompt: str, response_format, tools: list | None = None):
     )
 
 
-def run_agent(agent, transcript: str, config: RunnableConfig):
+async def run_agent(agent, transcript: str, config: RunnableConfig):
     """Invoke a scribe sub-agent over the transcript and return its structured output."""
-    result = agent.invoke(
+    result = await agent.ainvoke(
         {
             "messages": [
                 {
@@ -228,11 +300,12 @@ def run_agent(agent, transcript: str, config: RunnableConfig):
             ]
         },
         config=config,
+        stream=False,
     )
     return result["structured_response"]
 
 
-def vitals_node(state: ScribeState, config: RunnableConfig) -> dict:
+async def vitals_node(state: ScribeState, config: RunnableConfig) -> dict:
     """Extract vitals with a dedicated, tool-free agent.
 
     Kept separate from diagnoses because the 4B model reliably drops vitals when
@@ -240,24 +313,24 @@ def vitals_node(state: ScribeState, config: RunnableConfig) -> dict:
     """
     logger.info("Vitals node: extracting vitals (tool-free)")
     agent = build_agent(vitals_prompt, VitalSigns)
-    return {"vital_signs": run_agent(agent, state["transcript"], config)}
+    return {"vital_signs": await run_agent(agent, state["transcript"], config)}
 
 
-def hpi_node(state: ScribeState, config: RunnableConfig) -> dict:
+async def hpi_node(state: ScribeState, config: RunnableConfig) -> dict:
     """Write the History of Present Illness with a dedicated, tool-free agent."""
     logger.info("HPI node: writing history of present illness (tool-free)")
     agent = build_agent(hpi_prompt, HistoryOfPresentIllness)
-    return {"hpi": run_agent(agent, state["transcript"], config)}
+    return {"hpi": await run_agent(agent, state["transcript"], config)}
 
 
-def physical_exam_node(state: ScribeState, config: RunnableConfig) -> dict:
+async def physical_exam_node(state: ScribeState, config: RunnableConfig) -> dict:
     """Extract physical exam findings with a dedicated, tool-free agent."""
     logger.info("Physical exam node: extracting PE findings (tool-free)")
     agent = build_agent(physical_exam_prompt, PhysicalExam)
-    return {"physical_exam": run_agent(agent, state["transcript"], config)}
+    return {"physical_exam": await run_agent(agent, state["transcript"], config)}
 
 
-def diagnoses_node(state: ScribeState, config: RunnableConfig) -> dict:
+async def diagnoses_node(state: ScribeState, config: RunnableConfig) -> dict:
     """Extract and (optionally) tool-validate the differentials and assessment.
 
     Uses `ProviderStrategy` (native JSON-schema output) rather than the default
@@ -274,21 +347,27 @@ def diagnoses_node(state: ScribeState, config: RunnableConfig) -> dict:
         ProviderStrategy(schema=DiagnosesOutput),
         tools=tools,
     )
-    return {"diagnoses": run_agent(agent, state["transcript"], config)}
+    return {"diagnoses": await run_agent(agent, state["transcript"], config)}
 
 
-def build_parallel_graph():
+def build_parallel_graph(cache=None):
     """The HPI, vitals, physical exam, and diagnoses nodes run in parallel, then merge.
 
     Needs a local Ollama server configured for concurrency (OLLAMA_NUM_PARALLEL >= 4);
     otherwise the four simultaneous structured-output calls can return empty responses.
     Kept for when the server is configured for parallelism.
+
+    When a `cache` backend is passed, each node caches its result under a policy
+    keyed on that node's inputs (see make_cache_key).
     """
+    enabled = cache is not None
     builder = StateGraph(ScribeState)
-    builder.add_node("hpi", hpi_node)
-    builder.add_node("vitals", vitals_node)
-    builder.add_node("physical_exam", physical_exam_node)
-    builder.add_node("diagnoses", diagnoses_node)
+    builder.add_node("hpi", hpi_node, cache_policy=_cache_policy(enabled, hpi_prompt))
+    builder.add_node("vitals", vitals_node, cache_policy=_cache_policy(enabled, vitals_prompt))
+    builder.add_node(
+        "physical_exam", physical_exam_node, cache_policy=_cache_policy(enabled, physical_exam_prompt)
+    )
+    builder.add_node("diagnoses", diagnoses_node, cache_policy=_cache_policy(enabled, None))
     # Fan-out from START (parallel), fan-in to END. The nodes write different
     # state keys, so no reducers are needed.
     builder.add_edge(START, "hpi")
@@ -299,33 +378,40 @@ def build_parallel_graph():
     builder.add_edge("vitals", END)
     builder.add_edge("physical_exam", END)
     builder.add_edge("diagnoses", END)
-    return builder.compile()
+    return builder.compile(cache=cache)
 
 
-def build_sequential_graph():
+def build_sequential_graph(cache=None):
     """HPI, then vitals, then physical exam, then diagnoses — one Ollama call at a time.
 
     Reliable against a single local Ollama server (no concurrent requests). The
     nodes write different state keys, so no reducers are needed.
+
+    When a `cache` backend is passed, each node caches its result under a policy
+    keyed on that node's inputs (see make_cache_key).
     """
+    enabled = cache is not None
     builder = StateGraph(ScribeState)
-    builder.add_node("hpi", hpi_node)
-    builder.add_node("vitals", vitals_node)
-    builder.add_node("physical_exam", physical_exam_node)
-    builder.add_node("diagnoses", diagnoses_node)
+    builder.add_node("hpi", hpi_node, cache_policy=_cache_policy(enabled, hpi_prompt))
+    builder.add_node("vitals", vitals_node, cache_policy=_cache_policy(enabled, vitals_prompt))
+    builder.add_node(
+        "physical_exam", physical_exam_node, cache_policy=_cache_policy(enabled, physical_exam_prompt)
+    )
+    builder.add_node("diagnoses", diagnoses_node, cache_policy=_cache_policy(enabled, None))
     builder.add_edge(START, "hpi")
     builder.add_edge("hpi", "vitals")
     builder.add_edge("vitals", "physical_exam")
     builder.add_edge("physical_exam", "diagnoses")
     builder.add_edge("diagnoses", END)
-    return builder.compile()
+    return builder.compile(cache=cache)
 
 
-def extract_note(
+async def extract_note(
     transcript: str,
     diagnoses_prompt: str,
     use_tool: bool = False,
     parallel: bool = False,
+    cache: bool = False,
 ) -> ClinicalNote:
     """Run the scribe graph and merge its parallel outputs into a ClinicalNote.
 
@@ -333,9 +419,17 @@ def extract_note(
     (ICD-10 tool when `use_tool`) run either sequentially (default, single local
     Ollama server) or in parallel (`parallel=True`, requires OLLAMA_NUM_PARALLEL
     >= 4); their results are combined here.
+
+    With `cache=True`, node results are cached to disk (see build_cache), so a
+    later run with unchanged inputs skips the LLM calls for the unchanged nodes.
     """
+    cache_backend = build_cache() if cache else None
+    if cache_backend is not None:
+        logger.info("Node caching enabled (DiskCache at %s, ttl=%s)", CACHE_DIR, CACHE_TTL)
     scribe_graph = (
-        build_parallel_graph() if parallel else build_sequential_graph()
+        build_parallel_graph(cache_backend)
+        if parallel
+        else build_sequential_graph(cache_backend)
     )
     logger.info(
         "Running scribe graph (%s) over transcript (%d chars), ICD-10 tool %s",
@@ -344,13 +438,14 @@ def extract_note(
         "enabled" if use_tool else "disabled",
     )
     start = time.perf_counter()
-    final = scribe_graph.invoke(
+    final = await scribe_graph.ainvoke(
         {
             "transcript": transcript,
             "diagnoses_prompt": diagnoses_prompt,
             "use_tool": use_tool,
         },
         config={"callbacks": get_callbacks()},
+        stream=False,
     )
     logger.info("Graph finished in %.2fs", time.perf_counter() - start)
 
@@ -410,12 +505,31 @@ def parse_args() -> argparse.Namespace:
             "concurrency (OLLAMA_NUM_PARALLEL >= 4)."
         ),
     )
+    parser.add_argument(
+        "--cache",
+        action="store_true",
+        help=(
+            "Cache each node's result to disk so a later run with unchanged inputs "
+            "(same transcript, prompt, and model) skips its LLM call. Editing a "
+            f"prompt re-runs only that node. Cache dir: {CACHE_DIR}."
+        ),
+    )
+    parser.add_argument(
+        "--clear-cache",
+        action="store_true",
+        help=f"Delete all cached node results (in {CACHE_DIR}) and exit.",
+    )
     return parser.parse_args()
 
 
-if __name__ == "__main__":
+async def main() -> None:
     args = parse_args()
     total_start = time.perf_counter()
+
+    if args.clear_cache:
+        build_cache().clear()
+        logger.info("Cleared node cache at %s", CACHE_DIR)
+        return
 
     # Resolve the diagnoses prompt: honor -d if given, else pick the default that
     # matches the flow (tool-based vs baseline).
@@ -434,8 +548,12 @@ if __name__ == "__main__":
     logger.info("Reading diagnoses prompt from %s", diagnoses_prompt_path)
     diagnoses_prompt = diagnoses_prompt_path.read_text(encoding="utf-8").strip()
 
-    note = extract_note(
-        transcript, diagnoses_prompt, use_tool=args.use_tool, parallel=args.parallel
+    note = await extract_note(
+        transcript,
+        diagnoses_prompt,
+        use_tool=args.use_tool,
+        parallel=args.parallel,
+        cache=args.cache,
     )
     print(note.model_dump_json(indent=2))
 
@@ -452,3 +570,7 @@ if __name__ == "__main__":
         logger.info("Flushed Langfuse traces")
 
     logger.info("Total time: %.2fs", time.perf_counter() - total_start)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
