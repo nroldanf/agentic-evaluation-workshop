@@ -23,3 +23,6 @@ plan_medical_scribe_agent.md
 
 # Presentation files
 presentation/
+
+# Node-level cache (see --cache)
+.cache/
