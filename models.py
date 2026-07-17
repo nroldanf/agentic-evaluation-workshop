@@ -11,6 +11,8 @@ The Field descriptions double as extraction hints for the model, so keep them
 clear and specific.
 """
 
+from enum import Enum
+
 from pydantic import BaseModel, Field
 
 
@@ -75,11 +77,28 @@ class HistoryOfPresentIllness(BaseModel):
     )
 
 
+class PhysicalExamSystem(str, Enum):
+    """The body systems that may be documented in the physical exam."""
+
+    GENERAL = "general"
+    HEENT = "heent"
+    NECK = "neck"
+    CARDIOVASCULAR = "cardiovascular"
+    RESPIRATORY = "respiratory"
+    GASTROINTESTINAL = "gastrointestinal"
+    GENITOURINARY = "genitourinary"
+    MUSCULOSKELETAL = "musculoskeletal"
+    EXTREMITIES = "extremities"
+    SKIN = "skin"
+    NEUROLOGIC = "neurologic"
+    PSYCHIATRIC = "psychiatric"
+
+
 class PhysicalExamFinding(BaseModel):
     """Documented findings for a single body system examined."""
 
-    system: str = Field(
-        description="The body system examined, e.g. 'Respiratory', 'Cardiovascular', 'HEENT'.",
+    system: PhysicalExamSystem = Field(
+        description="The body system examined. Must be one of the defined systems.",
     )
     findings: str = Field(
         description="Documented findings for that system, including the absence of expected abnormalities when stated.",
