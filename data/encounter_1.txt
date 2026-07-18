@@ -1,0 +1,103 @@
+ENCOUNTER ID: RIV-001
+LOCATION: Casa de Elrond, Rivendell
+PATIENT: Frodo Baggins
+EXAMINER: Elrond
+INFORMANT: Arwen (historiadora colateral; el paciente llega inconsciente)
+
+---
+
+ELROND: Con cuidado, aquí, sobre la mesa. Bien. Arwen, necesito que me cuentes todo lo que sepas, desde el principio.
+
+ARWEN: Lo atacaron hace varios días, en Weathertop. Cinco de ellos, según me dijo Aragorn.
+
+ELROND: ¿Cinco Nazgûl?
+
+ARWEN: Sí. Uno logró herirlo antes de que Aragorn los espantara con fuego.
+
+ELROND: ¿Y tú no estabas ahí cuando ocurrió?
+
+ARWEN: No. Me encontré con el grupo después, mientras buscaban athelas. Para entonces la herida ya llevaba un par de días.
+
+ELROND: Entiendo. ¿Sabes con qué exactamente lo hirieron?
+
+ARWEN: Aragorn dijo que era una daga. No una hoja común.
+
+ELROND: ¿Te dijo algo más sobre ella? ¿Se rompió algo dentro?
+
+ARWEN: Eso mismo temía él. No estaba seguro.
+
+ELROND: Está bien, seguimos. ¿Qué hizo Aragorn por la herida, en el camino?
+
+ARWEN: Le puso athelas la primera noche. Y otra vez al día siguiente, creo.
+
+ELROND: ¿Ayudó?
+
+ARWEN: Al principio pareció que sí. Después ya no tanto.
+
+ELROND: ¿Cuándo empezó a empeorar, más o menos?
+
+ARWEN: Difícil decir un día exacto. Lo noté peor cada vez que lo veía. Más pálido, más cansado.
+
+ELROND: ¿Hablaba con claridad todavía, para entonces?
+
+ARWEN: Sí, la mayor parte del camino. Se fue apagando poco a poco, hasta que dejó de responderme, ya cerca del Vado.
+
+ELROND: Necesito que me digas exactamente qué te contaba, en sus propias palabras si las recuerdas.
+
+ARWEN: Al principio solo se quejaba del hombro. Después empezó a decir cosas más raras.
+
+ELROND: ¿Como qué?
+
+ARWEN: Que todo se veía pálido. Lejano. "Como si me estuviera desvaneciendo", me dijo, más de una vez.
+
+ELROND: ¿Y el dolor? ¿Dónde lo sentía exactamente?
+
+ARWEN: Empezó en el hombro, dijo. Pero me contó que sentía el frío moverse desde ahí hacia el pecho, un poco más cada día.
+
+ELROND: ¿Fiebre? ¿Escalofríos?
+
+ARWEN: Se lo pregunté directamente, la última vez que hablamos con claridad. Me dijo que no creía tener fiebre.
+
+ELROND: ¿Tú qué notaste, aparte de lo que él te decía?
+
+ARWEN: Que mentía, o que no se daba cuenta. Para cuando cruzamos el Vado estaba ardiendo al tacto, y temblando sin parar.
+
+ELROND: Bien, eso es importante. ¿Algo más? ¿Comió, bebió agua en el camino?
+
+ARWEN: Poco, los últimos dos días. No tenía ánimo ni fuerza para mucho.
+
+ELROND: ¿Y el brazo? ¿Llegó a moverlo frente a ti?
+
+ARWEN: Antes de perder la consciencia me dijo que lo sentía más débil que el otro. Fue de las últimas cosas que me dijo con claridad.
+
+ELROND: De acuerdo. Voy a examinarlo ahora. Dime si notas algo mientras lo hago.
+
+(Elrond retira el vendaje improvisado)
+
+ELROND: El borde de la herida está pálido. Casi blanco. Frío al tacto, incluso con el resto del cuerpo caliente por la fiebre.
+
+ARWEN: ¿Eso es normal?
+
+ELROND: No. Una infección común se pondría roja, hinchada, caliente alrededor. Esto es distinto. Y aquí — mira esto — estas líneas pálidas que suben hacia el pecho, tampoco deberían estar ahí.
+
+ARWEN: ¿Qué significa?
+
+ELROND: Que la hoja dejó algo dentro que sigue actuando. Algo que va más allá de lo que Aragorn podía tratar en el camino, con lo que tenía a mano.
+
+(Elrond revisa el brazo izquierdo, levantándolo con cuidado)
+
+ELROND: No hay respuesta al estímulo, ahora mismo. Nada.
+
+ARWEN: ¿Eso es por el dolor, o es algo más?
+
+ELROND: Todavía no lo sé con certeza. Puede ser ambas cosas. Voy a limpiar la herida e inmovilizar el brazo ahora. Después, solo queda observar cómo evoluciona en las próximas horas.
+
+ARWEN: ¿Y si despierta?
+
+ELROND: Si despierta, aunque sea un momento, quiero que me llames de inmediato. Cualquier cosa que diga, por pequeña que parezca, la necesito saber.
+
+ARWEN: Me quedaré con él.
+
+ELROND: Bien. Vuelvo en un momento con lo necesario para la herida.
+
+---
