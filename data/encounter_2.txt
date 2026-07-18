@@ -1,0 +1,127 @@
+ENCOUNTER ID: HOU-002
+LOCATION: Casas de Curación, Minas Tirith
+PATIENT: Frodo Baggins
+EXAMINER: Aragorn
+PRESENTE: Gandalf, Samwise Gamgee, Meriadoc Brandybuck, Peregrin Took, Legolas, Gimli
+
+---
+
+FRODO: (despertando lentamente, en una cama, luz clara entrando por la ventana) ¿Gandalf?
+
+GANDALF: (a los pies de la cama, sonriendo) Aquí estoy.
+
+FRODO: Pensé que habías muerto.
+
+GANDALF: Yo también lo pensé, por un tiempo.
+
+(Merry y Pippin entran corriendo y se lanzan sobre la cama a abrazar a Frodo)
+
+MERRY: ¡Está despierto!
+
+PIPPIN: Creímos que dormirías para siempre.
+
+FRODO: (riendo, algo abrumado) Con cuidado, con cuidado.
+
+(Gimli y Legolas entran, seguidos de Aragorn)
+
+GIMLI: Ya era hora.
+
+LEGOLAS: Te ves mejor de lo que esperábamos, maestro Bolsón.
+
+(Sam aparece último, en la puerta. Frodo lo ve y ambos se quedan mirándose un momento, sin decir nada)
+
+ARAGORN: (acercándose a la cama) Merry, Pippin, denme un momento con él. Quiero revisarlo con calma, ahora que está despierto de verdad.
+
+PIPPIN: (saliendo, no muy convencido) Está bien. Pero volvemos apenas termines.
+
+(Merry y Pippin salen. Gimli y Legolas se quedan cerca de la puerta. Sam se acerca a la cama, del otro lado de Aragorn)
+
+ARAGORN: Frodo. ¿Sabes dónde estás?
+
+FRODO: Dijiste... Minas Tirith. Las Casas de Curación, creo.
+
+ARAGORN: Así es. ¿Sabes cuánto tiempo ha pasado, desde que te sacaron de la montaña?
+
+FRODO: No tengo idea, la verdad.
+
+ARAGORN: Varios días. Dormiste la mayor parte.
+
+SAM: Yo también dormí bastante, pero no tanto como usted, señor Frodo.
+
+ARAGORN: Déjame ver tu mano.
+
+FRODO: (mirándola, como si la viera por primera vez con claridad) Ya no está el dedo.
+
+ARAGORN: Lo sé. Sam me contó lo que pudo.
+
+FRODO: Gollum me lo arrancó. Al final, justo antes de caer con el Anillo.
+
+ARAGORN: (examinando la herida) Está cicatrizando bien, considerando todo. Voy a limpiarla de nuevo y cambiar el vendaje. Avísame si duele.
+
+FRODO: (mientras Aragorn trabaja) Ah— sí, un poco, ahí.
+
+ARAGORN: Ya casi termino. ¿Cómo te sientes, en general?
+
+FRODO: Cansado. Muy cansado, todavía.
+
+ARAGORN: ¿Y la sed? ¿El hambre?
+
+FRODO: Sed, mucha. Más de la que he tenido en toda mi vida, aunque ya me han dado agua desde que desperté. El hambre no tanto, la verdad.
+
+SAM: (interviniendo) Eso es quedarse corto. Casi no ha querido comer nada.
+
+FRODO: No tengo mucho ánimo para eso todavía, Sam.
+
+ARAGORN: Vamos a trabajar en eso, poco a poco. También veo algunas quemaduras leves aquí, en las manos, y un poco en la cara. Por la ceniza y el calor de la montaña.
+
+FRODO: No las había notado hasta que las mencionas tú también.
+
+ARAGORN: Es común, cuando el cuerpo estuvo ocupado en cosas más urgentes. No son profundas, pero hay que seguir cuidándolas.
+
+ARAGORN: ¿Y el hombro? La herida vieja, la de Weathertop.
+
+FRODO: (pensándolo) Ese ya no duele. Hace tiempo que no, la verdad. Ni siquiera lo había pensado hasta que lo mencionas.
+
+ARAGORN: Bien, eso es lo que esperaba oír.
+
+ARAGORN: Cuéntame, ¿cómo has dormido, en lo que llevas despierto entre sueños?
+
+FRODO: No mucho, quitando lo de dormir tanto de golpe. Me despierto varias veces cada noche.
+
+ARAGORN: ¿Alguna razón en particular? ¿Dolor, pesadillas?
+
+FRODO: (dudando) Es difícil de explicar.
+
+ARAGORN: Tómate tu tiempo.
+
+FRODO: Todavía siento el peso a veces. El del Anillo, quiero decir. Sé que ya no está, que se destruyó. Pero sigo sintiéndolo, como si siguiera ahí.
+
+ARAGORN: ¿Desde cuándo sientes eso?
+
+FRODO: No sabría decir un momento exacto. Empezó en algún punto del camino, mucho antes de llegar a la montaña.
+
+FRODO: Y en algunos de esos sueños, siento que algo me observa. Como si el Ojo siguiera ahí. Sigo sintiéndolo un poco al despertar, aunque sé que ya pasó el peligro.
+
+ARAGORN: ¿Le has hablado a alguien más de esto? ¿A Sam?
+
+FRODO: Un poco. No quiero que se preocupe más de lo que ya está.
+
+SAM: (interviniendo) Me preocupo igual, señor Frodo, se lo diga o no.
+
+ARAGORN: Voy a dejarlo anotado, para que alguien pueda hablar contigo de esto con más calma, cuando estés más recuperado del resto. No es algo que tengamos que resolver hoy.
+
+FRODO: Está bien.
+
+ARAGORN: Por ahora, lo más importante es que sigas comiendo y descansando. El resto lo iremos viendo.
+
+SAM: Eso mismo le he estado insistiendo yo.
+
+ARAGORN: Bien. Entonces empecemos por ahí — Sam, ¿le consigues algo de comer, aunque sea poco?
+
+SAM: (ya poniéndose de pie) Con gusto, señor Frodo.
+
+GIMLI: (desde la puerta) ¿Ya podemos volver a entrar todos, o prefieres seguir jugando al sanador?
+
+ARAGORN: (sonriendo) Ya casi termino, Gimli. Un momento más.
+
+---
