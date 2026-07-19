@@ -121,6 +121,21 @@ simultáneas pueden devolver respuestas vacías.
 uv run python agent.py --parallel
 ```
 
+### Ejecutar solo algunos nodes
+
+Los cuatro nodes son independientes entre sí (ninguno depende de la salida de
+otro), así que podés correr solo un subconjunto con `--only`, o excluir
+algunos con `--skip` — útil para iterar rápido sobre un node (p. ej. mientras
+ajustás un prompt) sin pagar el costo de correr los demás:
+
+```bash
+uv run python agent.py --only hpi
+uv run python agent.py --skip diagnoses
+```
+
+Los nodes que no corren quedan con su valor por defecto/vacío en el
+`ClinicalNote` resultante (p. ej. `hpi=""`, `assessment` vacío).
+
 ### Caching de nodos
 
 Agrega `--cache` para cachear en disco el resultado de cada node. En una
@@ -193,54 +208,49 @@ sin tocar el código:
 ## Tracing (opcional)
 
 El tracing con [Langfuse](https://langfuse.com) se habilita automáticamente
-cuando las keys están definidas. Copia `.env.example` a `.env` y completa tus
-valores `LANGFUSE_*` (public/secret key y `LANGFUSE_HOST`). Sin ellos, el agent
-se ejecuta normalmente con el tracing deshabilitado.
+cuando las keys están definidas. Sin ellas, el agent se ejecuta normalmente
+con el tracing deshabilitado.
 
 ### Levantar Langfuse localmente
 
 El repo incluye un `docker-compose.yml` (basado en el
 [self-hosting oficial de Langfuse](https://langfuse.com/self-hosting), v3) para
 correr una instancia local completa: `langfuse-web`, `langfuse-worker`,
-`postgres`, `clickhouse`, `redis` y `minio`.
+`postgres`, `clickhouse`, `redis` y `minio`. `.env.example` ya trae **todos**
+los valores que necesita — infra secrets, keys y el seed de org/project/user —
+así que no hay nada que generar ni configurar:
 
 ```bash
 cp .env.example .env   # si aún no lo hiciste
 docker compose up -d
 ```
 
-`.env.example` ya trae valores de desarrollo listos para copiar y pegar (ver la
-sección `LOCAL LANGFUSE INSTANCE`), así que no hay nada que configurar para
-levantar una instancia funcional:
+Eso es todo. La UI queda en http://localhost:3000 — inicia sesión con
+`user@example.com` / `langfuse`. El proyecto sembrado usa directamente tus
+`LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` de `.env` como las keys del
+proyecto (ver `docker-compose.yml`), así que el agent ya traza contra esta
+instancia sin ningún paso extra.
 
-- Los infra secrets (`SALT`, `ENCRYPTION_KEY`, `NEXTAUTH_SECRET`,
-  `POSTGRES_PASSWORD`, `CLICKHOUSE_PASSWORD`, `REDIS_AUTH`,
-  `MINIO_ROOT_PASSWORD`) ya coinciden con los defaults de `docker-compose.yml`.
-- Las variables `LANGFUSE_INIT_*` siembran un org/project/user dummy (`org` /
-  `project` / `user@example.com` / `langfuse` / `langfuse`) en el primer
-  arranque. La UI queda en http://localhost:3000 — inicia sesión con
-  `user@example.com` / `langfuse`.
+Para bajar el stack:
 
-Para un uso más allá de tu propia máquina, sobrescribe cualquiera de esos
-valores en tu `.env` (los que aplica están marcados `CHANGEME`).
+```bash
+docker compose down          # conserva los datos (volumes)
+docker compose down -v       # borra también los volumes (reset completo)
+```
 
-Si prefieres no auto-provisionar nada y crear el org/project/user a mano desde
-la UI, comenta `LANGFUSE_INIT_ORG_ID` en `.env` — es el interruptor maestro:
+Si preferís no auto-provisionar nada y crear el org/project/user a mano desde
+la UI, comentá `LANGFUSE_INIT_ORG_ID` en `.env` — es el interruptor maestro:
 sin él, Langfuse no crea nada aunque el resto de `LANGFUSE_INIT_*` esté
 definido.
 
-El proyecto sembrado usa directamente tus `LANGFUSE_PUBLIC_KEY`/
-`LANGFUSE_SECRET_KEY` (ver `docker-compose.yml`) como
-`LANGFUSE_INIT_PROJECT_PUBLIC_KEY`/`_SECRET_KEY`, así que ambos pares nunca
-quedan desincronizados — para que el agent trace contra esta instancia solo
-tienes que definir esas dos keys una vez.
+#### Generar tus propias keys y secrets (opcional)
 
-#### Generar las keys y secrets
-
-Los defaults de `.env.example` sirven para una instancia local de un solo uso;
-para cualquier otro caso, genera tus propios valores. Ningún valor real debe
-vivir en `docker-compose.yml` (queda trackeado en git); todos van en tu `.env`
-local (gitignored). Comandos para generar cada uno:
+Los defaults de `.env.example` son solo para una instancia local de un solo
+uso. Si vas a compartir esta instancia con alguien más, o querés un proyecto
+Langfuse propio en vez del dummy sembrado, genera tus propios valores.
+Ningún valor real debe vivir en `docker-compose.yml` (queda trackeado en
+git); todos van en tu `.env` local (gitignored). Comandos para generar cada
+uno:
 
 - **`LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY`** — el formato que valida
   Langfuse es `pk-lf-<uuid>` / `sk-lf-<uuid>`. Para arrancar un proyecto nuevo
@@ -265,12 +275,43 @@ Después de generarlos, agrégalos a tu `.env` (no a `docker-compose.yml` ni a
 `.env.example`) y reinicia el stack (`docker compose up -d`) para que tomen
 efecto.
 
-Para bajar el stack:
+## HPI LLM-as-a-Judge
+
+`eval_hpi_judge.py` califica un HPI ya generado (una traza existente en
+Langfuse) contra su transcript, en tres dimensiones — 0 a 4 cada una, ver
+`prompts/hpi_judge_prompt.txt` — **Accuracy** (fidelidad al transcript),
+**Completeness** (cobertura del contenido relevante) y **Tone** (registro de
+documentación clínica). Adjunta los resultados de vuelta a Langfuse como
+Scores (`hpi_accuracy`, `hpi_completeness`, `hpi_tone`).
+
+Requiere una traza existente con un node `hpi` — corré `agent.py` con
+tracing habilitado (ver arriba) al menos una vez antes.
 
 ```bash
-docker compose down          # conserva los datos (volumes)
-docker compose down -v       # borra también los volumes (reset completo)
+uv run python eval_hpi_judge.py                        # usa la traza más reciente
+uv run python eval_hpi_judge.py --trace-id <trace_id>  # traza específica
 ```
+
+### Modelo juez
+
+El juez usa un modelo distinto al `OLLAMA_MODEL` del generador a propósito —
+evita el sesgo de que un modelo se auto-prefiera al calificarse a sí mismo:
+
+- **Amazon Bedrock** (por defecto) — requiere credenciales AWS en el entorno
+  (p. ej. `aws sso login`) con permiso `bedrock:InvokeModel` /
+  `bedrock:InvokeModelWithResponseStream`.
+- **Fallback a Ollama local** — si la llamada a Bedrock falla (sin internet,
+  credenciales vencidas, sin acceso al modelo), reintenta automáticamente
+  contra un modelo local distinto al del generador, y lo deja registrado en
+  el `comment`/metadata del score.
+
+Variables de entorno (ver `.env.example`, sección `HPI LLM-AS-A-JUDGE`):
+
+- `JUDGE_BEDROCK_MODEL_ID` — model id o inference profile de Bedrock (por
+  defecto `us.anthropic.claude-sonnet-4-5-20250929-v1:0`).
+- `AWS_REGION` — región de Bedrock (por defecto `us-east-1`).
+- `JUDGE_FALLBACK_OLLAMA_MODEL` — modelo local de respaldo (por defecto
+  `mistral:latest`); debe ser distinto de `OLLAMA_MODEL`.
 
 ## References to read later
 - Constraint tax: https://arxiv.org/pdf/2606.25605 
