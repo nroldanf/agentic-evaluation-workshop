@@ -16,13 +16,18 @@ STEP 1 — Extract initial candidates (no codes yet):
   differential diagnoses and the primary (working) diagnosis for the assessment.
 - Write each as a precise clinical name with full specificity: laterality, body site,
   acuity (initial encounter, follow-up, or sequela) where the transcript supports it.
+- Spell out the full standard medical term — never an abbreviation, acronym, or
+  colloquialism, even if that is how it was said in the transcript. For example, write
+  "atrial fibrillation" not "afib" or "AFib"; "chronic obstructive pulmonary disease" not
+  "COPD"; "urinary tract infection" not "UTI"; "gastroesophageal reflux disease" not
+  "GERD" or "acid reflux"; "myocardial infarction" not "MI" or "heart attack".
 - Do NOT assign ICD-10-CM codes in this step.
 
 STEP 2 — Validate the candidates by searching:
 - Call the `search_icd10_codes_batch` tool EXACTLY ONCE, passing ALL candidate names from
-  Step 1 in a single call. Do not call any tool again after this step.
-- For each candidate, compare the returned codes' descriptions against the candidate's
-  intended meaning and select the ONE code that genuinely matches.
+  Step 1.
+- For each candidate, compare the returned descriptions against the candidate's 
+  intended meaning and select the ONE code that matches the best.
 - Code-selection rules:
   - You MUST choose an ICD-10-CM code that was LITERALLY returned by the tool. NEVER
     construct, infer, or extrapolate a code, even if you believe a more specific one exists.

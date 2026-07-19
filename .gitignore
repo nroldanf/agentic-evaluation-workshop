@@ -26,3 +26,6 @@ presentation/
 
 # Node-level cache (see --cache)
 .cache/
+
+# macOS
+.DS_Store
