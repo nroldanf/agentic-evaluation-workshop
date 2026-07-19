@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import TypedDict
 
 from dotenv import load_dotenv
+import httpx
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelRetryMiddleware
 from langchain.agents.structured_output import ProviderStrategy
@@ -36,8 +37,9 @@ from langgraph.types import CachePolicy
 
 import models as models_module
 from cache import DiskCache
-from icd10_search import search_icd10, search_icd10_batch
+from icd10_search import search_icd10_hybrid, search_icd10_hybrid_batch
 from models import (
+    Assessment,
     ClinicalNote,
     DiagnosesOutput,
     HistoryOfPresentIllness,
@@ -72,6 +74,7 @@ def get_callbacks() -> list:
     logger.info("Langfuse tracing enabled")
     return [CallbackHandler()]
 
+
 TRANSCRIPT_PATH = Path("data/transcript.txt")
 OUTPUT_PATH = Path("outputs/clinical_note.json")
 SYSTEM_PROMPT_PATH = Path("prompts/system_prompt.txt")
@@ -96,8 +99,8 @@ def save_json(filename: str, data: dict) -> str:
 
 
 @tool
-def search_icd10_codes(diagnosis_name: str, limit: int = 10) -> list[dict]:
-    """Fuzzy-search active ICD-10-CM codes by diagnosis name.
+def search_icd10_codes(diagnosis_name: str, limit: int = 25) -> list[dict]:
+    """Search active ICD-10-CM codes by diagnosis name.
 
     Use this to find the correct ICD-10-CM code for a condition mentioned in the
     transcript. Returns the closest matching codes, best match first.
@@ -109,15 +112,15 @@ def search_icd10_codes(diagnosis_name: str, limit: int = 10) -> list[dict]:
     Returns:
         A list of {"icd10_code", "description", "score"} candidates.
     """
-    return search_icd10(diagnosis_name, limit=limit)
+    return search_icd10_hybrid(diagnosis_name, limit=limit)
 
 
 @tool
-def search_icd10_codes_batch(diagnosis_names: list[str], limit: int = 10) -> dict:
-    """Fuzzy-search active ICD-10-CM codes for many diagnosis names at once.
+def search_icd10_codes_batch(diagnosis_names: list[str], limit: int = 25) -> dict:
+    """Search active ICD-10-CM codes for many diagnosis names at once.
 
-    Call this ONCE with every diagnosis name you need to code. Returns, for each
-    input name, the closest matching codes (best match first).
+    Search for all the diagnosis names in `diagnosis_names` and return a mapping of each name to its list of candidate codes, best match first. Useful for validating a list of
+    differentials extracted from a transcript.
 
     Args:
         diagnosis_names: Condition names to look up, e.g. ["acute bronchitis", "asthma"].
@@ -127,7 +130,7 @@ def search_icd10_codes_batch(diagnosis_names: list[str], limit: int = 10) -> dic
         A mapping of each diagnosis name to its list of
         {"icd10_code", "description", "score"} candidates.
     """
-    return search_icd10_batch(diagnosis_names, limit=limit)
+    return search_icd10_hybrid_batch(diagnosis_names, limit=limit)
 
 
 # The LLM: a local Ollama model. A low temperature keeps extraction near-deterministic.
@@ -144,12 +147,42 @@ logger.info(
     OLLAMA_TEMPERATURE,
     OLLAMA_TIMEOUT,
 )
-llm = ChatOllama(
-    model=OLLAMA_MODEL,
-    temperature=OLLAMA_TEMPERATURE,
-    keep_alive="5m",
+
+shared = {
+    "model": OLLAMA_MODEL,
+    "num_ctx": 20480,
+    "keep_alive": "15m",
+    "validate_model_on_init": True,
+    "client_kwargs": {
+        "timeout": httpx.Timeout(
+            connect=10.0,
+            read=OLLAMA_TIMEOUT,
+            write=30.0,
+            pool=10.0,
+        )
+    },
+}
+
+extraction_model = ChatOllama(
+    **shared,
+    temperature=0.0,
+    seed=42,
+    reasoning=False,
     num_predict=1024,
-    client_kwargs={"timeout": OLLAMA_TIMEOUT},
+)
+tool_model = ChatOllama(
+    **shared,
+    temperature=0.1,
+    reasoning=True,
+    num_predict=4096,
+)
+# Same params as tool_model, minus reasoning: used when use_tool is False so
+# reasoning is never enabled without the ICD-10 tool.
+tool_model_no_reasoning = ChatOllama(
+    **shared,
+    temperature=0.1,
+    reasoning=False,
+    num_predict=4096,
 )
 
 # Number of times to retry a failed model call (e.g. an empty structured-output
@@ -254,7 +287,7 @@ class ScribeState(TypedDict):
     diagnoses: DiagnosesOutput
 
 
-def build_agent(prompt: str, response_format, tools: list | None = None):
+def build_agent(llm, prompt: str, response_format, tools: list | None = None):
     """Build a scribe sub-agent from its task prompt and output schema.
 
     Every sub-agent shares the same model, scribe system role, and retry
@@ -312,21 +345,21 @@ async def vitals_node(state: ScribeState, config: RunnableConfig) -> dict:
     it is also doing the ICD-10 tool workflow in the same pass.
     """
     logger.info("Vitals node: extracting vitals (tool-free)")
-    agent = build_agent(vitals_prompt, VitalSigns)
+    agent = build_agent(extraction_model, vitals_prompt, VitalSigns)
     return {"vital_signs": await run_agent(agent, state["transcript"], config)}
 
 
 async def hpi_node(state: ScribeState, config: RunnableConfig) -> dict:
     """Write the History of Present Illness with a dedicated, tool-free agent."""
     logger.info("HPI node: writing history of present illness (tool-free)")
-    agent = build_agent(hpi_prompt, HistoryOfPresentIllness)
+    agent = build_agent(extraction_model, hpi_prompt, HistoryOfPresentIllness)
     return {"hpi": await run_agent(agent, state["transcript"], config)}
 
 
 async def physical_exam_node(state: ScribeState, config: RunnableConfig) -> dict:
     """Extract physical exam findings with a dedicated, tool-free agent."""
     logger.info("Physical exam node: extracting PE findings (tool-free)")
-    agent = build_agent(physical_exam_prompt, PhysicalExam)
+    agent = build_agent(extraction_model, physical_exam_prompt, PhysicalExam)
     return {"physical_exam": await run_agent(agent, state["transcript"], config)}
 
 
@@ -343,6 +376,7 @@ async def diagnoses_node(state: ScribeState, config: RunnableConfig) -> dict:
     )
     tools = [search_icd10_codes_batch] if use_tool else []
     agent = build_agent(
+        tool_model if use_tool else tool_model_no_reasoning,
         state["diagnoses_prompt"],
         ProviderStrategy(schema=DiagnosesOutput),
         tools=tools,
@@ -350,39 +384,43 @@ async def diagnoses_node(state: ScribeState, config: RunnableConfig) -> dict:
     return {"diagnoses": await run_agent(agent, state["transcript"], config)}
 
 
-def build_parallel_graph(cache=None):
-    """The HPI, vitals, physical exam, and diagnoses nodes run in parallel, then merge.
+ALL_NODES = ["hpi", "vitals", "physical_exam", "diagnoses"]
+
+# Each node reads only `transcript`/`diagnoses_prompt`/`use_tool` from the initial
+# state, never another node's output, so any subset of ALL_NODES can run safely.
+_NODE_SPECS = {
+    "hpi": (hpi_node, hpi_prompt),
+    "vitals": (vitals_node, vitals_prompt),
+    "physical_exam": (physical_exam_node, physical_exam_prompt),
+    "diagnoses": (diagnoses_node, None),
+}
+
+
+def build_parallel_graph(cache=None, nodes: list[str] | None = None):
+    """The selected nodes run in parallel, then merge (default: all four).
 
     Needs a local Ollama server configured for concurrency (OLLAMA_NUM_PARALLEL >= 4);
-    otherwise the four simultaneous structured-output calls can return empty responses.
+    otherwise the simultaneous structured-output calls can return empty responses.
     Kept for when the server is configured for parallelism.
 
     When a `cache` backend is passed, each node caches its result under a policy
     keyed on that node's inputs (see make_cache_key).
     """
+    nodes = nodes if nodes is not None else ALL_NODES
     enabled = cache is not None
     builder = StateGraph(ScribeState)
-    builder.add_node("hpi", hpi_node, cache_policy=_cache_policy(enabled, hpi_prompt))
-    builder.add_node("vitals", vitals_node, cache_policy=_cache_policy(enabled, vitals_prompt))
-    builder.add_node(
-        "physical_exam", physical_exam_node, cache_policy=_cache_policy(enabled, physical_exam_prompt)
-    )
-    builder.add_node("diagnoses", diagnoses_node, cache_policy=_cache_policy(enabled, None))
     # Fan-out from START (parallel), fan-in to END. The nodes write different
     # state keys, so no reducers are needed.
-    builder.add_edge(START, "hpi")
-    builder.add_edge(START, "vitals")
-    builder.add_edge(START, "physical_exam")
-    builder.add_edge(START, "diagnoses")
-    builder.add_edge("hpi", END)
-    builder.add_edge("vitals", END)
-    builder.add_edge("physical_exam", END)
-    builder.add_edge("diagnoses", END)
+    for name in nodes:
+        fn, prompt = _NODE_SPECS[name]
+        builder.add_node(name, fn, cache_policy=_cache_policy(enabled, prompt))
+        builder.add_edge(START, name)
+        builder.add_edge(name, END)
     return builder.compile(cache=cache)
 
 
-def build_sequential_graph(cache=None):
-    """HPI, then vitals, then physical exam, then diagnoses — one Ollama call at a time.
+def build_sequential_graph(cache=None, nodes: list[str] | None = None):
+    """The selected nodes run in order, one Ollama call at a time (default: all four).
 
     Reliable against a single local Ollama server (no concurrent requests). The
     nodes write different state keys, so no reducers are needed.
@@ -390,19 +428,19 @@ def build_sequential_graph(cache=None):
     When a `cache` backend is passed, each node caches its result under a policy
     keyed on that node's inputs (see make_cache_key).
     """
+    nodes = nodes if nodes is not None else ALL_NODES
     enabled = cache is not None
     builder = StateGraph(ScribeState)
-    builder.add_node("hpi", hpi_node, cache_policy=_cache_policy(enabled, hpi_prompt))
-    builder.add_node("vitals", vitals_node, cache_policy=_cache_policy(enabled, vitals_prompt))
-    builder.add_node(
-        "physical_exam", physical_exam_node, cache_policy=_cache_policy(enabled, physical_exam_prompt)
-    )
-    builder.add_node("diagnoses", diagnoses_node, cache_policy=_cache_policy(enabled, None))
-    builder.add_edge(START, "hpi")
-    builder.add_edge("hpi", "vitals")
-    builder.add_edge("vitals", "physical_exam")
-    builder.add_edge("physical_exam", "diagnoses")
-    builder.add_edge("diagnoses", END)
+    for name in nodes:
+        fn, prompt = _NODE_SPECS[name]
+        builder.add_node(name, fn, cache_policy=_cache_policy(enabled, prompt))
+
+    # Connect the selected nodes sequentially, in canonical order.
+    prev = START
+    for name in nodes:
+        builder.add_edge(prev, name)
+        prev = name
+    builder.add_edge(prev, END)
     return builder.compile(cache=cache)
 
 
@@ -412,6 +450,7 @@ async def extract_note(
     use_tool: bool = False,
     parallel: bool = False,
     cache: bool = False,
+    nodes: list[str] | None = None,
 ) -> ClinicalNote:
     """Run the scribe graph and merge its parallel outputs into a ClinicalNote.
 
@@ -420,21 +459,28 @@ async def extract_note(
     Ollama server) or in parallel (`parallel=True`, requires OLLAMA_NUM_PARALLEL
     >= 4); their results are combined here.
 
+    `nodes` restricts which of ALL_NODES actually run (default: all four) — handy
+    for fast iteration on a single node without paying for the others. Any node
+    that didn't run contributes its schema default (or an empty Assessment) to
+    the returned ClinicalNote instead of a real result.
+
     With `cache=True`, node results are cached to disk (see build_cache), so a
     later run with unchanged inputs skips the LLM calls for the unchanged nodes.
     """
+    nodes = nodes if nodes is not None else ALL_NODES
     cache_backend = build_cache() if cache else None
     if cache_backend is not None:
         logger.info("Node caching enabled (DiskCache at %s, ttl=%s)", CACHE_DIR, CACHE_TTL)
     scribe_graph = (
-        build_parallel_graph(cache_backend)
+        build_parallel_graph(cache_backend, nodes)
         if parallel
-        else build_sequential_graph(cache_backend)
+        else build_sequential_graph(cache_backend, nodes)
     )
     logger.info(
-        "Running scribe graph (%s) over transcript (%d chars), ICD-10 tool %s",
+        "Running scribe graph (%s) over transcript (%d chars), nodes=%s, ICD-10 tool %s",
         "parallel" if parallel else "sequential",
         len(transcript),
+        ",".join(nodes),
         "enabled" if use_tool else "disabled",
     )
     start = time.perf_counter()
@@ -444,19 +490,36 @@ async def extract_note(
             "diagnoses_prompt": diagnoses_prompt,
             "use_tool": use_tool,
         },
-        config={"callbacks": get_callbacks()},
+        config={
+            "callbacks": get_callbacks(),
+            "max_concurrency": 1,
+        },
         stream=False,
     )
     logger.info("Graph finished in %.2fs", time.perf_counter() - start)
 
-    diagnoses = final["diagnoses"]
+    hpi_result = final.get("hpi")
+    vitals_result = final.get("vital_signs")
+    pe_result = final.get("physical_exam")
+    diagnoses_result = final.get("diagnoses")
     return ClinicalNote(
-        hpi=final["hpi"].hpi,
-        vital_signs=final["vital_signs"],
-        physical_exam=final["physical_exam"].findings,
-        differential_diagnoses=diagnoses.differential_diagnoses,
-        assessment=diagnoses.assessment,
+        hpi=hpi_result.hpi if hpi_result else "",
+        vital_signs=vitals_result or VitalSigns(),
+        physical_exam=pe_result.findings if pe_result else [],
+        differential_diagnoses=diagnoses_result.differential_diagnoses if diagnoses_result else [],
+        assessment=diagnoses_result.assessment
+        if diagnoses_result
+        else Assessment(icd10_code="", diagnosis_name=""),
     )
+
+
+def _node_list(raw: str) -> list[str]:
+    """Parse a comma-separated `--only`/`--skip` value into validated node names."""
+    names = [n.strip() for n in raw.split(",") if n.strip()]
+    invalid = [n for n in names if n not in ALL_NODES]
+    if invalid:
+        raise argparse.ArgumentTypeError(f"unknown node(s) {invalid}; choose from {ALL_NODES}")
+    return names
 
 
 def parse_args() -> argparse.Namespace:
@@ -505,6 +568,26 @@ def parse_args() -> argparse.Namespace:
             "concurrency (OLLAMA_NUM_PARALLEL >= 4)."
         ),
     )
+    node_group = parser.add_mutually_exclusive_group()
+    node_group.add_argument(
+        "--only",
+        type=_node_list,
+        metavar="NODE[,NODE...]",
+        help=(
+            "Run only these nodes, skipping the rest (comma-separated, from "
+            f"{', '.join(ALL_NODES)}). Useful for fast iteration on one node. "
+            "Nodes not run contribute an empty/default section to the output."
+        ),
+    )
+    node_group.add_argument(
+        "--skip",
+        type=_node_list,
+        metavar="NODE[,NODE...]",
+        help=(
+            "Run all nodes except these (comma-separated, from "
+            f"{', '.join(ALL_NODES)})."
+        ),
+    )
     parser.add_argument(
         "--cache",
         action="store_true",
@@ -548,12 +631,20 @@ async def main() -> None:
     logger.info("Reading diagnoses prompt from %s", diagnoses_prompt_path)
     diagnoses_prompt = diagnoses_prompt_path.read_text(encoding="utf-8").strip()
 
+    if args.only:
+        nodes = args.only
+    elif args.skip:
+        nodes = [n for n in ALL_NODES if n not in args.skip]
+    else:
+        nodes = ALL_NODES
+
     note = await extract_note(
         transcript,
         diagnoses_prompt,
         use_tool=args.use_tool,
         parallel=args.parallel,
         cache=args.cache,
+        nodes=nodes,
     )
     print(note.model_dump_json(indent=2))
 

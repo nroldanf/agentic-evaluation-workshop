@@ -176,3 +176,31 @@ class ClinicalNote(BaseModel):
     assessment: Assessment = Field(
         description="Primary diagnosis or working diagnosis, including ICD-10 codes.",
     )
+
+
+class HPIJudgeScore(BaseModel):
+    """LLM-as-a-Judge assessment of a generated HPI against its source transcript.
+
+    Scores each dimension 0-4; see `prompts/hpi_judge_prompt.txt` for the rubric.
+    """
+
+    accuracy_score: int = Field(
+        ge=0, le=4, description="Faithfulness of the HPI to the transcript, 0-4."
+    )
+    accuracy_rationale: str = Field(
+        description="2-4 sentences citing the transcript/HPI evidence behind the accuracy score."
+    )
+    completeness_score: int = Field(
+        ge=0,
+        le=4,
+        description="Coverage of transcript content relevant to the present illness, 0-4.",
+    )
+    completeness_rationale: str = Field(
+        description="2-4 sentences citing the transcript/HPI evidence behind the completeness score."
+    )
+    tone_score: int = Field(
+        ge=0, le=4, description="Physician-documentation register of the HPI, 0-4."
+    )
+    tone_rationale: str = Field(
+        description="2-4 sentences citing the HPI evidence behind the tone score."
+    )
