@@ -197,5 +197,80 @@ cuando las keys están definidas. Copia `.env.example` a `.env` y completa tus
 valores `LANGFUSE_*` (public/secret key y `LANGFUSE_HOST`). Sin ellos, el agent
 se ejecuta normalmente con el tracing deshabilitado.
 
+### Levantar Langfuse localmente
+
+El repo incluye un `docker-compose.yml` (basado en el
+[self-hosting oficial de Langfuse](https://langfuse.com/self-hosting), v3) para
+correr una instancia local completa: `langfuse-web`, `langfuse-worker`,
+`postgres`, `clickhouse`, `redis` y `minio`.
+
+```bash
+cp .env.example .env   # si aún no lo hiciste
+docker compose up -d
+```
+
+`.env.example` ya trae valores de desarrollo listos para copiar y pegar (ver la
+sección `LOCAL LANGFUSE INSTANCE`), así que no hay nada que configurar para
+levantar una instancia funcional:
+
+- Los infra secrets (`SALT`, `ENCRYPTION_KEY`, `NEXTAUTH_SECRET`,
+  `POSTGRES_PASSWORD`, `CLICKHOUSE_PASSWORD`, `REDIS_AUTH`,
+  `MINIO_ROOT_PASSWORD`) ya coinciden con los defaults de `docker-compose.yml`.
+- Las variables `LANGFUSE_INIT_*` siembran un org/project/user dummy (`org` /
+  `project` / `user@example.com` / `langfuse` / `langfuse`) en el primer
+  arranque. La UI queda en http://localhost:3000 — inicia sesión con
+  `user@example.com` / `langfuse`.
+
+Para un uso más allá de tu propia máquina, sobrescribe cualquiera de esos
+valores en tu `.env` (los que aplica están marcados `CHANGEME`).
+
+Si prefieres no auto-provisionar nada y crear el org/project/user a mano desde
+la UI, comenta `LANGFUSE_INIT_ORG_ID` en `.env` — es el interruptor maestro:
+sin él, Langfuse no crea nada aunque el resto de `LANGFUSE_INIT_*` esté
+definido.
+
+El proyecto sembrado usa directamente tus `LANGFUSE_PUBLIC_KEY`/
+`LANGFUSE_SECRET_KEY` (ver `docker-compose.yml`) como
+`LANGFUSE_INIT_PROJECT_PUBLIC_KEY`/`_SECRET_KEY`, así que ambos pares nunca
+quedan desincronizados — para que el agent trace contra esta instancia solo
+tienes que definir esas dos keys una vez.
+
+#### Generar las keys y secrets
+
+Los defaults de `.env.example` sirven para una instancia local de un solo uso;
+para cualquier otro caso, genera tus propios valores. Ningún valor real debe
+vivir en `docker-compose.yml` (queda trackeado en git); todos van en tu `.env`
+local (gitignored). Comandos para generar cada uno:
+
+- **`LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY`** — el formato que valida
+  Langfuse es `pk-lf-<uuid>` / `sk-lf-<uuid>`. Para arrancar un proyecto nuevo
+  desde cero:
+
+  ```bash
+  echo "LANGFUSE_PUBLIC_KEY=pk-lf-$(uuidgen | tr 'A-Z' 'a-z')"
+  echo "LANGFUSE_SECRET_KEY=sk-lf-$(uuidgen | tr 'A-Z' 'a-z')"
+  ```
+
+  Alternativa: dejar `LANGFUSE_INIT_*` sin definir, crear el proyecto a mano en
+  la UI (http://localhost:3000) y copiar las keys que Langfuse genera ahí a tu
+  `.env`.
+- **`ENCRYPTION_KEY`** — 256 bits en hex: `openssl rand -hex 32`
+- **`SALT`** y **`NEXTAUTH_SECRET`** — 256 bits en base64:
+  `openssl rand -base64 32`
+- **`POSTGRES_PASSWORD`**, **`CLICKHOUSE_PASSWORD`**, **`REDIS_AUTH`**,
+  **`MINIO_ROOT_PASSWORD`**, **`LANGFUSE_INIT_USER_PASSWORD`** — cualquier
+  password fuerte, p. ej.: `openssl rand -base64 18`
+
+Después de generarlos, agrégalos a tu `.env` (no a `docker-compose.yml` ni a
+`.env.example`) y reinicia el stack (`docker compose up -d`) para que tomen
+efecto.
+
+Para bajar el stack:
+
+```bash
+docker compose down          # conserva los datos (volumes)
+docker compose down -v       # borra también los volumes (reset completo)
+```
+
 ## References to read later
 - Constraint tax: https://arxiv.org/pdf/2606.25605 
