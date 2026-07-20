@@ -13,12 +13,12 @@ Judge model: Amazon Bedrock by default, falling back to a local Ollama model
 
 import argparse
 import logging
-import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 from langfuse import get_client
 
+from judge_client import ensure_score_configs, invoke_judge
 from models import HPIJudgeScore
 
 load_dotenv()
@@ -31,21 +31,27 @@ logging.basicConfig(
 logger = logging.getLogger("hpi_judge")
 
 JUDGE_PROMPT_PATH = Path("prompts/hpi_judge_prompt.txt")
-BEDROCK_MODEL_ID = os.getenv("JUDGE_BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
-BEDROCK_REGION = os.getenv("AWS_REGION", "us-east-1")
-FALLBACK_OLLAMA_MODEL = os.getenv("JUDGE_FALLBACK_OLLAMA_MODEL", "mistral:latest")
 
 SCORE_CONFIGS = [
     {
         "name": "hpi_accuracy",
+        "data_type": "NUMERIC",
+        "min_value": 0,
+        "max_value": 4,
         "description": "Faithfulness of the HPI to the transcript (0-4). See prompts/hpi_judge_prompt.txt.",
     },
     {
         "name": "hpi_completeness",
+        "data_type": "NUMERIC",
+        "min_value": 0,
+        "max_value": 4,
         "description": "Coverage of transcript content relevant to the present illness (0-4). See prompts/hpi_judge_prompt.txt.",
     },
     {
         "name": "hpi_tone",
+        "data_type": "NUMERIC",
+        "min_value": 0,
+        "max_value": 4,
         "description": "Physician-documentation register of the HPI (0-4). See prompts/hpi_judge_prompt.txt.",
     },
 ]
@@ -68,60 +74,15 @@ def find_hpi_observation(client, trace_id: str):
     raise ValueError(f"No 'hpi' observation found on trace {trace_id}")
 
 
-def judge_hpi(model, judge_prompt: str, transcript: str, hpi: str) -> HPIJudgeScore:
-    structured_model = model.with_structured_output(HPIJudgeScore)
-    return structured_model.invoke(
-        [
-            {"role": "system", "content": judge_prompt},
-            {
-                "role": "user",
-                "content": f"<transcript>\n{transcript}\n</transcript>\n\n<hpi>\n{hpi}\n</hpi>",
-            },
-        ]
-    )
-
-
 def run_judge(judge_prompt: str, transcript: str, hpi: str) -> tuple[HPIJudgeScore, str]:
-    """Score with Bedrock; fall back to a local Ollama model if Bedrock fails.
-
-    The fallback is a different model than the `hpi` node's generator
-    (gemma4:e2b) so judge != generator even during an outage.
-    """
-    from langchain_aws import ChatBedrockConverse
-
-    try:
-        model = ChatBedrockConverse(model_id=BEDROCK_MODEL_ID, region_name=BEDROCK_REGION, temperature=0)
-        result = judge_hpi(model, judge_prompt, transcript, hpi)
-        return result, f"bedrock:{BEDROCK_MODEL_ID}"
-    except Exception as exc:
-        logger.warning(
-            "Bedrock judge call failed (%s); falling back to local Ollama %s", exc, FALLBACK_OLLAMA_MODEL
-        )
-        from langchain_ollama import ChatOllama
-
-        model = ChatOllama(model=FALLBACK_OLLAMA_MODEL, temperature=0)
-        result = judge_hpi(model, judge_prompt, transcript, hpi)
-        return result, f"ollama:{FALLBACK_OLLAMA_MODEL}"
-
-
-def ensure_score_configs(client) -> dict[str, str]:
-    """Create the 3 hpi_* score configs if they don't already exist."""
-    existing = {c.name: c.id for c in client.api.score_configs.get().data}
-    config_ids = {}
-    for cfg in SCORE_CONFIGS:
-        if cfg["name"] in existing:
-            config_ids[cfg["name"]] = existing[cfg["name"]]
-            continue
-        created = client.api.score_configs.create(
-            name=cfg["name"],
-            data_type="NUMERIC",
-            min_value=0,
-            max_value=4,
-            description=cfg["description"],
-        )
-        config_ids[cfg["name"]] = created.id
-        logger.info("Created score config %s (%s)", cfg["name"], created.id)
-    return config_ids
+    messages = [
+        {"role": "system", "content": judge_prompt},
+        {
+            "role": "user",
+            "content": f"<transcript>\n{transcript}\n</transcript>\n\n<hpi>\n{hpi}\n</hpi>",
+        },
+    ]
+    return invoke_judge(HPIJudgeScore, messages)
 
 
 def main():
@@ -148,7 +109,7 @@ def main():
     result, judge_model_name = run_judge(judge_prompt, transcript, hpi_text)
     logger.info("Judge model used: %s", judge_model_name)
 
-    config_ids = ensure_score_configs(client)
+    config_ids = ensure_score_configs(client, SCORE_CONFIGS)
     scores = [
         ("hpi_accuracy", result.accuracy_score, result.accuracy_rationale),
         ("hpi_completeness", result.completeness_score, result.completeness_rationale),

@@ -204,3 +204,35 @@ class HPIJudgeScore(BaseModel):
     tone_rationale: str = Field(
         description="2-4 sentences citing the HPI evidence behind the tone score."
     )
+
+
+class PEJudgeScore(BaseModel):
+    """LLM-as-a-Judge assessment of extracted Physical Exam findings against the transcript.
+
+    Scores each dimension 0-4; see `prompts/physical_exam_judge_prompt.txt` for
+    the rubric. Covers depth (accuracy/completeness of the findings actually
+    included, ignoring placeholder entries) and register (tone); the *breadth*
+    of which body systems were included is scored separately, by code, as
+    precision/recall against a golden system set.
+    """
+
+    accuracy_score: int = Field(
+        ge=0, le=4, description="Faithfulness of the non-placeholder PE findings to the transcript's exam, 0-4."
+    )
+    accuracy_rationale: str = Field(
+        description="2-4 sentences citing the transcript/PE evidence behind the accuracy score."
+    )
+    completeness_score: int = Field(
+        ge=0,
+        le=4,
+        description="Depth of findings captured for each system the exam actually covered, 0-4.",
+    )
+    completeness_rationale: str = Field(
+        description="2-4 sentences citing the transcript/PE evidence behind the completeness score."
+    )
+    tone_score: int = Field(
+        ge=0, le=4, description="PE documentation register of the findings, 0-4."
+    )
+    tone_rationale: str = Field(
+        description="2-4 sentences citing the PE evidence behind the tone score."
+    )
