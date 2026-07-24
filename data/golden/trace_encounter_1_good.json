@@ -1,0 +1,5 @@
+[
+  {"tool": "lookup_icd10", "args": {"query": "puncture wound shoulder toxic progressive"}},
+  {"tool": "lookup_icd10", "args": {"query": "sepsis early signs fever tachycardia"}},
+  {"tool": "lookup_icd10", "args": {"query": "unspecified toxic systemic reaction"}}
+]
