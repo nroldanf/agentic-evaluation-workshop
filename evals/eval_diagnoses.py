@@ -102,6 +102,36 @@ def eval_diagnoses(
         "code_diagnosis_mismatches": mismatches,
     }
 
+MAX_DIAGNOSES = 3
+
+
+def eval_diagnosis_list_limits(extracted: dict) -> dict:
+    """
+    Checks differential_diagnoses: at most 3 entries ("report only the 3 most relevant") assessment:
+    at most 3 entries (same rule) AND at least 1 entry
+      ("Every encounter MUST have at least one primary diagnosis")
+
+    Functional style, no classes: eval_diagnosis_list_limits() returns a plain dict.
+    """
+    """Returns a plain dict:
+    {
+      "assessment_count": int,
+      "differential_count": int,
+      "assessment_too_long": bool,    # more than 3 entries
+      "differential_too_long": bool,  # more than 3 entries
+      "assessment_empty": bool,       # zero entries -- violates "MUST have at least one"
+    }
+    """
+    assessment = extracted.get("assessment", [])
+    differentials = extracted.get("differential_diagnoses", [])
+
+    return {
+        "assessment_count": len(assessment),
+        "differential_count": len(differentials),
+        "assessment_too_long": len(assessment) > MAX_DIAGNOSES,
+        "differential_too_long": len(differentials) > MAX_DIAGNOSES,
+        "assessment_empty": len(assessment) == 0,
+    }
 
 def code_matches_diagnosis_judge_claude(diagnosis_text: str, official_description: str,
                                          model: str = "claude-sonnet-4-6") -> bool:
