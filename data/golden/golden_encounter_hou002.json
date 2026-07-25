@@ -27,21 +27,21 @@
   "differential_diagnoses": [
     {
       "icd10_code": "E44.0",
-      "diagnosis_name": "Moderate protein-calorie malnutrition"
+      "diagnosis": "Moderate protein-calorie malnutrition"
     }
   ],
   "assessment": [
     {
       "icd10_code": "S68.114A",
-      "diagnosis_name": "Traumatic amputation of right ring finger"
+      "diagnosis": "Traumatic amputation of right ring finger"
     },
     {
       "icd10_code": "E86.0",
-      "diagnosis_name": "Dehydration"
+      "diagnosis": "Dehydration"
     },
     {
       "icd10_code": "F43.0",
-      "diagnosis_name": "Acute stress reaction"
+      "diagnosis": "Acute stress reaction"
     }
   ],
   "expected_tool_calls": [

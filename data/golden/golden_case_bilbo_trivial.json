@@ -12,7 +12,7 @@
   "assessment": [
     {
       "icd10_code": "S61.409A",
-      "diagnosis_name": "Superficial wound of hand, no signs of infection"
+      "diagnosis": "Superficial wound of hand, no signs of infection"
     }
   ],
   "expected_tool_calls": [

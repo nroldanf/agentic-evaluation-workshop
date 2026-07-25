@@ -28,17 +28,17 @@
   "differential_diagnoses": [
     {
       "icd10_code": "A41.9",
-      "diagnosis_name": "Sepsis, unspecified organism"
+      "diagnosis": "Sepsis, unspecified organism"
     },
     {
       "icd10_code": "T14.8XXA",
-      "diagnosis_name": "Other injury of unspecified body region"
+      "diagnosis": "Other injury of unspecified body region"
     }
   ],
   "assessment": [
     {
       "icd10_code": "S41.032A",
-      "diagnosis_name": "Puncture wound of left shoulder with signs of progressive infection"
+      "diagnosis": "Puncture wound of left shoulder with signs of progressive infection"
     }
   ],
   "expected_tool_calls": [
