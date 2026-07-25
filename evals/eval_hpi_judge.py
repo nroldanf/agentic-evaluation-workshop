@@ -13,10 +13,15 @@ Judge model: Amazon Bedrock by default, falling back to a local Ollama model
 
 import argparse
 import logging
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 from langfuse import get_client
+
+# models.py lives at the repo root, one level up from evals/; judge_client is
+# a sibling module here in evals/ and needs no path change.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from judge_client import ensure_score_configs, invoke_judge
 from models import HPIJudgeScore

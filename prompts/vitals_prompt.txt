@@ -2,24 +2,14 @@ Extract the vital signs from the patient-doctor transcript.
 
 Extract ONLY vitals that are explicitly stated in the transcript. Do not infer,
 calculate, or fabricate values. Leave any field null if the corresponding measurement
-is not mentioned. Always populate the ``*units`` field whenever its measurement field is set.
+is not mentioned. Every field has a fixed unit (see below) — convert the transcript's
+reported value into that unit rather than reporting it as-is.
 
-TEMPERATURE: Describe the patient's body temperature. Include the following details:
-- "temperature": Numerical value of the patient's body temperature.
-- "temperature_units": "C" or "F"  # Specify whether the temperature is in Celsius or Fahrenheit.
-
-OXYGEN SATURATION: Describe the patient's oxygen saturation level. Include the following details:
-- "oxygen_saturation": Numerical value of the patient's oxygen saturation.
-- "oxygen_saturation_units": "%"  # Specify that the oxygen saturation is in percentage.
-
-HEART RATE: Describe the patient's heart rate. Include the following details:
-- "heart_rate": Numerical value of the patient's heart rate.
-- "heart_rate_units": "bpm"  # Specify that the heart rate is in beats per minute.
-
-RESPIRATORY RATE: Describe the patient's respiratory rate. Include the following details:
-- "respiratory_rate": Numerical value of the patient's respiratory rate.
-- "respiratory_rate_units": "breaths/min"  # Respiratory rate is measured in breaths per minute (never "bpm", which denotes heart beats).
-
-BLOOD PRESSURE: Describe the patient's blood pressure. Include the following details:
-- "blood_pressure": Numerical value of the patient's blood pressure in the format "systolic/diastolic".
-- "blood_pressure_units": "mmHg"  # Specify that the blood pressure is in millimeters of mercury.
+- "temperature_c": Numerical value of the patient's body temperature, in Celsius. If the
+  transcript reports Fahrenheit, convert it to Celsius.
+- "spo2_percent": Numerical value of the patient's oxygen saturation, as a percentage.
+- "heart_rate_bpm": Numerical value of the patient's heart rate, in beats per minute.
+- "respiratory_rate_bpm": Numerical value of the patient's respiratory rate, in breaths
+  per minute (do not confuse with heart rate).
+- "blood_pressure": The patient's blood pressure in mmHg, as the string
+  "systolic/diastolic".

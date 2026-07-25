@@ -275,9 +275,21 @@ Después de generarlos, agrégalos a tu `.env` (no a `docker-compose.yml` ni a
 `.env.example`) y reinicia el stack (`docker compose up -d`) para que tomen
 efecto.
 
-## HPI LLM-as-a-Judge
+## Evals
 
-`eval_hpi_judge.py` califica un HPI ya generado (una traza existente en
+Todos los scripts de evaluación viven en `evals/` (se corren siempre desde la
+raíz del repo, no desde adentro de `evals/`, para que sus paths relativos a
+`prompts/`/`data/` resuelvan bien):
+
+- `evals/eval_hpi_judge.py` / `evals/eval_clinical_note_dataset.py` — LLM-as-a-Judge,
+  requieren Langfuse + un juez (Bedrock u Ollama). Comparten la selección de
+  modelo juez vía `evals/judge_client.py` (no se corre directamente).
+- `evals/eval_diagnoses.py` / `evals/eval_vitals.py` / `evals/eval_trajectory.py` —
+  funciones puras, sin Langfuse ni LLM.
+
+### HPI LLM-as-a-Judge
+
+`evals/eval_hpi_judge.py` califica un HPI ya generado (una traza existente en
 Langfuse) contra su transcript, en tres dimensiones — 0 a 4 cada una, ver
 `prompts/hpi_judge_prompt.txt` — **Accuracy** (fidelidad al transcript),
 **Completeness** (cobertura del contenido relevante) y **Tone** (registro de
@@ -288,11 +300,11 @@ Requiere una traza existente con un node `hpi` — corré `agent.py` con
 tracing habilitado (ver arriba) al menos una vez antes.
 
 ```bash
-uv run python eval_hpi_judge.py                        # usa la traza más reciente
-uv run python eval_hpi_judge.py --trace-id <trace_id>  # traza específica
+uv run python evals/eval_hpi_judge.py                        # usa la traza más reciente
+uv run python evals/eval_hpi_judge.py --trace-id <trace_id>  # traza específica
 ```
 
-### Modelo juez
+#### Modelo juez
 
 El juez usa un modelo distinto al `OLLAMA_MODEL` del generador a propósito —
 evita el sesgo de que un modelo se auto-prefiera al calificarse a sí mismo:
@@ -312,6 +324,56 @@ Variables de entorno (ver `.env.example`, sección `HPI LLM-AS-A-JUDGE`):
 - `AWS_REGION` — región de Bedrock (por defecto `us-east-1`).
 - `JUDGE_FALLBACK_OLLAMA_MODEL` — modelo local de respaldo (por defecto
   `mistral:latest`); debe ser distinto de `OLLAMA_MODEL`.
+
+### Clinical Note Dataset Eval (HPI + Physical Exam)
+
+`evals/eval_clinical_note_dataset.py` es el carril offline/regresión: corre la
+extracción de HPI + Physical Exam para cada encuentro golden y adjunta 8
+evaluators (LLM-judge + code) a un mismo Experiment/DatasetRun en Langfuse
+(ver el docstring del archivo para el detalle de qué mide cada score).
+
+Los encuentros golden se leen de `data/golden/golden_encounter_*.json`
+(emparejados con su transcript en `data/encounter_*.txt` por `encounter_id`,
+p. ej. `"encounter_id": "RIV-001"` -> `data/encounter_riv001.txt`) — se pasan
+como argumento en vez de estar hardcodeados en el script:
+
+```bash
+uv run python evals/eval_clinical_note_dataset.py                                                   # los 2 encuentros default
+uv run python evals/eval_clinical_note_dataset.py --golden-file data/golden/golden_encounter_1.json  # solo uno (repetible)
+uv run python evals/eval_clinical_note_dataset.py --run-name mi-corrida-de-prueba
+```
+
+Requiere Langfuse corriendo (ver arriba) y el mismo juez que `evals/eval_hpi_judge.py`
+(Bedrock por defecto, fallback a Ollama local).
+
+> **Nota:** `pe_precision`/`pe_recall` (breakdown del Physical Exam por
+> sistema corporal) todavía se comparan contra una referencia hardcodeada en
+> `PE_SYSTEM_REFERENCE` dentro del script, en vez de leerla de
+> `golden_encounter_*.json` — ese archivo guarda `physical_exam` como texto
+> libre, no como lista por sistema. Ver TODO.md §10 ("Open questions / risks").
+
+### Evals determinísticos (diagnósticos, vitals, trayectoria)
+
+`evals/eval_diagnoses.py`, `evals/eval_vitals.py` y `evals/eval_trajectory.py`
+son funciones puras — sin llamadas a Langfuse ni a ningún LLM — que comparan
+una nota clínica extraída (p. ej. `outputs/encounter_2.json`, generado por
+`agent.py`) o una traza de tool calls contra un `golden_encounter_*.json`.
+`evals/run_evals.py` es un stub vacío, pensado como futuro punto de entrada
+CLI para correr los tres a la vez.
+
+Por ahora se exploran celda a celda en `notebooks/eval_walkthrough.ipynb`,
+que carga `data/golden/golden_encounter_{1,2}.json` junto con sus mocks
+`extracted_encounter_{1,2}_{good,bad}.json` / `trace_encounter_{1,2}_{good,bad}.json`
+y corre cada eval contra la versión "good" y la "bad" para mostrar qué señal
+produce cada uno:
+
+```bash
+uv run --with jupyter jupyter notebook notebooks/eval_walkthrough.ipynb
+```
+
+(o abrilo directamente con la extensión de Jupyter de VS Code / PyCharm — es
+un `.ipynb` estándar, no requiere nada especial). No necesita API key ni
+internet: todo lee JSON local y el `.parquet` de catálogo ICD-10.
 
 ## References to read later
 - Constraint tax: https://arxiv.org/pdf/2606.25605 
