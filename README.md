@@ -339,7 +339,7 @@ como argumento en vez de estar hardcodeados en el script:
 
 ```bash
 uv run python evals/eval_clinical_note_dataset.py                                                   # los 2 encuentros default
-uv run python evals/eval_clinical_note_dataset.py --golden-file data/golden/golden_encounter_1.json  # solo uno (repetible)
+uv run python evals/eval_clinical_note_dataset.py --golden-file data/golden/golden_encounter_riv001.json  # solo uno (repetible)
 uv run python evals/eval_clinical_note_dataset.py --run-name mi-corrida-de-prueba
 ```
 

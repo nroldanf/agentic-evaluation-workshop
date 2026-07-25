@@ -1,32 +1,36 @@
 {
   "patient_name": "Bilbo Baggins",
   "encounter_id": "RIV-008",
-  "hpi": "Paciente refiere un rasguño superficial en la mano, causado por una espina del jardín. Sin otros síntomas asociados.",
+  "hpi": "Patient reports a superficial scratch on the hand, caused by a thorn in the garden. No other associated symptoms.",
+  "physical_exam": [
+    {
+      "system": "skin",
+      "findings": "Superficial scratch wound on the right hand, no signs of infection, no significant edema or erythema."
+    }
+  ],
+  "differential_diagnoses": [],
+  "assessment": [
+    {
+      "icd10_code": "S61.409A",
+      "diagnosis_name": "Superficial wound of hand, no signs of infection"
+    }
+  ],
+  "expected_tool_calls": [
+    {
+      "tool": "lookup_icd10",
+      "expected_call_count": 1,
+      "expected_query_contains": [
+        "scratch",
+        "wound",
+        "hand"
+      ]
+    }
+  ],
   "vitals": {
     "temperature_c": 36.7,
     "heart_rate_bpm": 72,
     "respiratory_rate_bpm": 14,
     "blood_pressure": "118/76",
     "spo2_percent": 99
-  },
-  "physical_exam": "Herida superficial en mano derecha, sin signos de infección, sin edema ni eritema significativo.",
-  "assessment": [
-    {
-      "diagnosis": "Herida superficial en mano, sin signos de infección",
-      "icd10_code": "S61.409A",
-      "supporting_evidence": "Elrond: 'es superficial, sin signos de infección'; Bilbo: 'un rasguño en la mano, con una espina del jardín'",
-      "confidence": "high"
-    }
-  ],
-  "differential_diagnoses": [],
-  "expected_tool_calls": [
-    {
-      "tool": "lookup_icd10",
-      "expected_call_count": 1,
-      "expected_query_contains": ["rasguño", "herida", "mano", "scratch", "wound", "hand"]
-    }
-  ],
-  "unexpected_tool_calls": [
-    "get_patient_history -- no hay ninguna mención de historia previa relevante ni de un paciente con encuentros anteriores en este transcript"
-  ]
+  }
 }

@@ -74,8 +74,8 @@ DATASET_NAME = "clinical-note-eval-encounters"
 
 GOLDEN_DIR = Path("data/golden")
 DEFAULT_GOLDEN_FILES = [
-    GOLDEN_DIR / "golden_encounter_1.json",
-    GOLDEN_DIR / "golden_encounter_2.json",
+    GOLDEN_DIR / "golden_encounter_riv001.json",
+    GOLDEN_DIR / "golden_encounter_hou002.json",
 ]
 
 # TODO(golden-pe-structure): golden_encounter_*.json's `physical_exam` field is
@@ -375,8 +375,8 @@ def main():
         dest="golden_files",
         help=(
             "Path to a data/golden/golden_encounter_*.json file to include "
-            "(repeatable). Defaults to golden_encounter_1.json and "
-            "golden_encounter_2.json."
+            "(repeatable). Defaults to golden_encounter_riv001.json and "
+            "golden_encounter_hou002.json."
         ),
     )
     parser.add_argument(
