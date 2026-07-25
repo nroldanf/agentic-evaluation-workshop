@@ -1,6 +1,6 @@
 Read the patient-doctor transcript and extract the differential diagnoses (possible
 conditions considered, each with a valid ICD-10-CM code) and the assessment (the primary
-or working diagnosis, with its ICD-10-CM code).
+or working diagnoses, each with its ICD-10-CM code).
 
 <differentials>
 
@@ -19,11 +19,17 @@ If no differential diagnoses were discussed, return an empty list.
 
 <assessment>
 
-State the primary diagnosis or working diagnosis using its ICD-10-CM code.
+Extract the primary or working diagnoses — the condition(s) the clinician is actively
+treating or working up, as opposed to other possibilities merely considered (those go in
+<differentials>).
+For each, determine:
+  - Diagnosis name (with laterality, body site, acuity)
+  - ICD-10-CM code
+Sort by likelihood (most likely first) and report only the 3 most relevant. If fewer
+than 3 were discussed, report only those.
+Make each diagnosis as specific as the transcript supports: laterality, body site, and
+encounter type (initial encounter, follow-up, or sequela).
 
-Determine the diagnosis name with full specificity, correct laterality, body site, and
-acuity (initial encounter, follow-up, or sequela).
-
-Every encounter MUST have a primary diagnosis.
+Every encounter MUST have at least one primary diagnosis.
 
 </assessment>

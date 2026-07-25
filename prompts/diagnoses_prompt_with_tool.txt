@@ -1,6 +1,6 @@
 Read the patient-doctor transcript and extract the differential diagnoses (possible
 conditions considered, each with a valid ICD-10-CM code) and the assessment (the primary
-or working diagnosis, with its ICD-10-CM code).
+or working diagnoses, each with its ICD-10-CM code).
 
 For every diagnosis you report (both differentials and assessment), you MUST assign the
 ICD-10-CM code using the `search_icd10_codes_batch` tool. Do NOT rely on your own memory
@@ -13,7 +13,7 @@ IN ORDER. Do not skip a step, and do not assign any ICD-10-CM code before Step 2
 
 STEP 1 — Extract initial candidates (no codes yet):
 - Read the transcript and list every candidate diagnosis discussed or implied: both the
-  differential diagnoses and the primary (working) diagnosis for the assessment.
+  differential diagnoses and the primary (working) diagnoses for the assessment.
 - Write each as a precise clinical name with full specificity: laterality, body site,
   acuity (initial encounter, follow-up, or sequela) where the transcript supports it.
 - Spell out the full standard medical term — never an abbreviation, acronym, or
@@ -31,7 +31,7 @@ STEP 2 — Validate the candidates by searching:
 - Code-selection rules:
   - You MUST choose an ICD-10-CM code that was LITERALLY returned by the tool. NEVER
     construct, infer, or extrapolate a code, even if you believe a more specific one exists.
-  - The `diagnosis_name` you output MUST be the EXACT description the tool returned for the
+  - The `diagnosis` you output MUST be the EXACT description the tool returned for the
     chosen code — do NOT paraphrase, embellish, or modify it.
   - Prefer the most specific matching code the tool returned (correct laterality, body site,
     and acuity) when the transcript supports that level of detail.
@@ -54,8 +54,9 @@ STEP 3 — Consolidate the final diagnoses:
   (most likely first), reporting ONLY the 3 most relevant. If fewer than 3 were discussed,
   report only those. Use ONLY diagnosis names and codes confirmed via the tool. If no
   differential diagnoses were discussed, return an empty list.
-- assessment: the consolidated primary/working diagnosis (required), using its
-  tool-validated code and its exact tool-returned description as the diagnosis name.
-  Every encounter MUST have a primary diagnosis.
+- assessment: the consolidated, validated primary/working diagnoses, sorted by likelihood
+  (most likely first), reporting ONLY the 3 most relevant. If fewer than 3 were discussed,
+  report only those. Use ONLY diagnosis names and codes confirmed via the tool. Every
+  encounter MUST have at least one primary diagnosis.
 
 </diagnoses_workflow>

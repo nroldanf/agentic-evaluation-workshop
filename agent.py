@@ -39,7 +39,6 @@ import models as models_module
 from cache import DiskCache
 from icd10_search import search_icd10_hybrid, search_icd10_hybrid_batch
 from models import (
-    Assessment,
     ClinicalNote,
     DiagnosesOutput,
     HistoryOfPresentIllness,
@@ -275,14 +274,14 @@ class ScribeState(TypedDict):
     """State for the scribe graph.
 
     Inputs: transcript, diagnoses_prompt, use_tool.
-    Outputs (written by parallel nodes): hpi, vital_signs, physical_exam, diagnoses.
+    Outputs (written by parallel nodes): hpi, vitals, physical_exam, diagnoses.
     """
 
     transcript: str
     diagnoses_prompt: str
     use_tool: bool
     hpi: HistoryOfPresentIllness
-    vital_signs: VitalSigns
+    vitals: VitalSigns
     physical_exam: PhysicalExam
     diagnoses: DiagnosesOutput
 
@@ -346,7 +345,7 @@ async def vitals_node(state: ScribeState, config: RunnableConfig) -> dict:
     """
     logger.info("Vitals node: extracting vitals (tool-free)")
     agent = build_agent(extraction_model, vitals_prompt, VitalSigns)
-    return {"vital_signs": await run_agent(agent, state["transcript"], config)}
+    return {"vitals": await run_agent(agent, state["transcript"], config)}
 
 
 async def hpi_node(state: ScribeState, config: RunnableConfig) -> dict:
@@ -461,7 +460,7 @@ async def extract_note(
 
     `nodes` restricts which of ALL_NODES actually run (default: all four) — handy
     for fast iteration on a single node without paying for the others. Any node
-    that didn't run contributes its schema default (or an empty Assessment) to
+    that didn't run contributes its schema default (or an empty list) to
     the returned ClinicalNote instead of a real result.
 
     With `cache=True`, node results are cached to disk (see build_cache), so a
@@ -499,17 +498,15 @@ async def extract_note(
     logger.info("Graph finished in %.2fs", time.perf_counter() - start)
 
     hpi_result = final.get("hpi")
-    vitals_result = final.get("vital_signs")
+    vitals_result = final.get("vitals")
     pe_result = final.get("physical_exam")
     diagnoses_result = final.get("diagnoses")
     return ClinicalNote(
         hpi=hpi_result.hpi if hpi_result else "",
-        vital_signs=vitals_result or VitalSigns(),
+        vitals=vitals_result or VitalSigns(),
         physical_exam=pe_result.findings if pe_result else [],
         differential_diagnoses=diagnoses_result.differential_diagnoses if diagnoses_result else [],
-        assessment=diagnoses_result.assessment
-        if diagnoses_result
-        else Assessment(icd10_code="", diagnosis_name=""),
+        assessment=diagnoses_result.assessment if diagnoses_result else [],
     )
 
 

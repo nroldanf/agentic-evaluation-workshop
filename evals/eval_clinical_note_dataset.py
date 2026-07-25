@@ -17,6 +17,13 @@ Metrics, one LLM call per section (see `prompts/hpi_judge_prompt.txt` /
     the golden physical exam; see `_is_filler`'s docstring for its one known
     limitation)
 
+Golden items are read from `data/golden/golden_encounter_*.json` (see
+`--golden-file`), matched to their transcript by `encounter_id` (`RIV-001`
+-> `data/encounter_riv001.txt`). Only `encounter_id` is used from those
+files — `pe_precision_recall_evaluator` still needs a per-system findings
+breakdown that the golden JSON doesn't carry yet (its `physical_exam` field
+is free-text prose); see `PE_SYSTEM_REFERENCE` below and TODO.md §10.
+
 Re-running this script (e.g. after switching `OLLAMA_MODEL` or editing a
 prompt) creates a new, separately named DatasetRun for side-by-side
 comparison in the UI.
@@ -24,13 +31,19 @@ comparison in the UI.
 
 import argparse
 import asyncio
+import json
 import logging
 import re
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
 from langfuse import Evaluation, get_client
+
+# agent.py and models.py live at the repo root, one level up from evals/ --
+# eval_hpi_judge and judge_client below are sibling modules in evals/ itself.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agent import (
     OLLAMA_MODEL,
@@ -59,54 +72,75 @@ logger = logging.getLogger("clinical_note_dataset_eval")
 PE_JUDGE_PROMPT_PATH = Path("prompts/physical_exam_judge_prompt.txt")
 DATASET_NAME = "clinical-note-eval-encounters"
 
-# Golden data for data/encounter_{1,2}.txt, confirmed with a human reviewer.
-# Only `physical_exam` has a golden reference: the HPI rubric grades against
-# the transcript directly, so no reference HPI is needed for scoring.
-GOLDEN_ITEMS = [
-    {
-        "id": "clinical-note-encounter-1",
-        "transcript_path": Path("data/encounter_riv001.txt"),
-        "expected_output": {
-            "physical_exam": [
-                {
-                    "system": "general",
-                    "findings": "Febrile / hot to touch on exam, despite a cold wound margin.",
-                },
-                {
-                    "system": "skin",
-                    "findings": (
-                        "Wound edge pale, almost white, and cold to touch; pale streaking "
-                        "extends from the wound toward the chest."
-                    ),
-                },
-                {
-                    "system": "neurologic",
-                    "findings": "Patient unconscious throughout the exam; no response to stimulus on the left arm.",
-                },
-            ]
-        },
-    },
-    {
-        "id": "clinical-note-encounter-2",
-        "transcript_path": Path("data/encounter_hou002.txt"),
-        "expected_output": {
-            "physical_exam": [
-                {"system": "general", "findings": "Patient awake and alert."},
-                {
-                    "system": "skin",
-                    "findings": "Superficial burns on both hands and on the face from ash/heat exposure.",
-                },
-                {
-                    "system": "extremities",
-                    "findings": (
-                        "Hand wound (finger amputation) healing well; mild pain elicited on "
-                        "manipulation during wound cleaning."
-                    ),
-                },
-            ]
-        },
-    },
+GOLDEN_DIR = Path("data/golden")
+DEFAULT_GOLDEN_FILES = [
+    GOLDEN_DIR / "golden_encounter_1.json",
+    GOLDEN_DIR / "golden_encounter_2.json",
 ]
+
+# TODO(golden-pe-structure): golden_encounter_*.json's `physical_exam` field is
+# free-text prose, not a per-system findings breakdown, so it can't drive
+# pe_precision_recall_evaluator directly (see TODO.md §10). Until that field
+# is restructured, keep a small hand-authored per-system reference here, keyed
+# by encounter_id, just for that one metric. The HPI rubric grades against the
+# transcript directly, so no reference HPI is needed either way.
+PE_SYSTEM_REFERENCE = {
+    "RIV-001": [
+        {
+            "system": "general",
+            "findings": "Febrile / hot to touch on exam, despite a cold wound margin.",
+        },
+        {
+            "system": "skin",
+            "findings": (
+                "Wound edge pale, almost white, and cold to touch; pale streaking "
+                "extends from the wound toward the chest."
+            ),
+        },
+        {
+            "system": "neurologic",
+            "findings": "Patient unconscious throughout the exam; no response to stimulus on the left arm.",
+        },
+    ],
+    "HOU-002": [
+        {"system": "general", "findings": "Patient awake and alert."},
+        {
+            "system": "skin",
+            "findings": "Superficial burns on both hands and on the face from ash/heat exposure.",
+        },
+        {
+            "system": "extremities",
+            "findings": (
+                "Hand wound (finger amputation) healing well; mild pain elicited on "
+                "manipulation during wound cleaning."
+            ),
+        },
+    ],
+}
+
+
+def _transcript_path_for(encounter_id: str) -> Path:
+    """`RIV-001` -> `data/encounter_riv001.txt`, matching the transcript naming
+    convention in data/ (encounter_id, lowercased, without the dash)."""
+    suffix = encounter_id.lower().replace("-", "")
+    return Path("data") / f"encounter_{suffix}.txt"
+
+
+def load_golden_items(golden_files: list[Path]) -> list[dict]:
+    """Build the dataset items from golden_encounter_*.json files."""
+    items = []
+    for golden_path in golden_files:
+        golden = json.loads(golden_path.read_text(encoding="utf-8"))
+        encounter_id = golden["encounter_id"]
+        items.append({
+            "id": f"clinical-note-{encounter_id.lower()}",
+            "transcript_path": _transcript_path_for(encounter_id),
+            "expected_output": {
+                "physical_exam": PE_SYSTEM_REFERENCE.get(encounter_id, [])
+            },
+        })
+    return items
+
 
 PE_SCORE_CONFIGS = [
     {
@@ -182,24 +216,24 @@ def _is_filler(findings_text: str) -> bool:
     return all(any(p.search(s) for p in _FILLER_PATTERNS) for s in sentences)
 
 
-def ensure_dataset(client) -> None:
-    """Create the shared golden dataset and upsert its 2 items if not already present."""
+def ensure_dataset(client, golden_items: list[dict]) -> None:
+    """Create the shared golden dataset and upsert its items if not already present."""
     try:
         client.create_dataset(
             name=DATASET_NAME,
-            description="Golden HPI + physical-exam data for data/encounter_riv001.txt and data/encounter_hou002.txt.",
+            description="Golden HPI + physical-exam data, one item per data/golden/golden_encounter_*.json.",
         )
     except Exception as exc:
         logger.info("Dataset %s already exists (%s)", DATASET_NAME, exc)
 
-    for golden in GOLDEN_ITEMS:
+    for golden in golden_items:
         client.create_dataset_item(
             dataset_name=DATASET_NAME,
             id=golden["id"],
             input=golden["transcript_path"].read_text(encoding="utf-8"),
             expected_output=golden["expected_output"],
         )
-    logger.info("Dataset %s ready with %d items", DATASET_NAME, len(GOLDEN_ITEMS))
+    logger.info("Dataset %s ready with %d items", DATASET_NAME, len(golden_items))
 
 
 # Populated by `main()` before the experiment runs; evaluators read it via
@@ -335,15 +369,28 @@ def pe_judge_evaluator(*, input, output, **kwargs) -> list[Evaluation]:
 def main():
     parser = argparse.ArgumentParser(description="Run the combined HPI + PE golden-dataset experiment.")
     parser.add_argument(
+        "--golden-file",
+        type=Path,
+        action="append",
+        dest="golden_files",
+        help=(
+            "Path to a data/golden/golden_encounter_*.json file to include "
+            "(repeatable). Defaults to golden_encounter_1.json and "
+            "golden_encounter_2.json."
+        ),
+    )
+    parser.add_argument(
         "--run-name",
         help="Name for this experiment run (defaults to '<OLLAMA_MODEL>-<timestamp>' so runs are distinguishable by generator model in the Langfuse UI).",
     )
     args = parser.parse_args()
 
+    golden_items = load_golden_items(args.golden_files or DEFAULT_GOLDEN_FILES)
+
     client = get_client()
     global _CONFIG_IDS
     _CONFIG_IDS = ensure_score_configs(client, SCORE_CONFIGS)
-    ensure_dataset(client)
+    ensure_dataset(client, golden_items)
 
     dataset = client.get_dataset(DATASET_NAME)
     result = dataset.run_experiment(

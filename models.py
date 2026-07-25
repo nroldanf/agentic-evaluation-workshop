@@ -19,48 +19,29 @@ from pydantic import BaseModel, Field
 class VitalSigns(BaseModel):
     """Objective vital sign measurements recorded during the encounter.
 
-    Each vital is split into a numeric/string value and its unit of measurement.
+    Each vital is a fixed-unit numeric/string value — convert to that unit
+    (e.g. Fahrenheit to Celsius) if the transcript reports a different one.
     """
 
-    temperature: float | None = Field(
+    temperature_c: float | None = Field(
         default=None,
-        description="Body temperature value, e.g. 100.8.",
+        description="Body temperature in Celsius, e.g. 37.8.",
     )
-    temperature_units: str | None = Field(
+    spo2_percent: float | None = Field(
         default=None,
-        description="Unit for temperature, e.g. 'F' or 'C'.",
+        description="Peripheral oxygen saturation (SpO2) as a percentage, e.g. 95.",
     )
-    oxygen_saturation: float | None = Field(
+    heart_rate_bpm: int | None = Field(
         default=None,
-        description="Peripheral oxygen saturation (SpO2) value, e.g. 95.",
+        description="Heart rate in beats per minute, e.g. 72.",
     )
-    oxygen_saturation_units: str | None = Field(
+    respiratory_rate_bpm: int | None = Field(
         default=None,
-        description="Unit for oxygen saturation, typically '%'.",
-    )
-    heart_rate: int | None = Field(
-        default=None,
-        description="Heart rate value, e.g. 72.",
-    )
-    heart_rate_units: str | None = Field(
-        default=None,
-        description="Unit for heart rate, typically 'bpm'.",
-    )
-    respiratory_rate: int | None = Field(
-        default=None,
-        description="Respiratory rate value, e.g. 16.",
-    )
-    respiratory_rate_units: str | None = Field(
-        default=None,
-        description="Unit for respiratory rate, typically 'breaths/min'.",
+        description="Respiratory rate in breaths per minute, e.g. 16.",
     )
     blood_pressure: str | None = Field(
         default=None,
-        description="Blood pressure value as 'systolic/diastolic', e.g. '120/80'.",
-    )
-    blood_pressure_units: str | None = Field(
-        default=None,
-        description="Unit for blood pressure, typically 'mmHg'.",
+        description="Blood pressure in mmHg, as 'systolic/diastolic', e.g. '120/80'.",
     )
 
 
@@ -118,13 +99,13 @@ class Diagnosis(BaseModel):
     """A single diagnosis with its ICD-10 code.
 
     Common model reused for both the differential diagnoses and the
-    assessment's primary/working diagnosis.
+    assessment's primary/working diagnoses.
     """
 
     icd10_code: str = Field(
         description="The ICD-10-CM code for the condition, e.g. 'J18.9'.",
     )
-    diagnosis_name: str = Field(
+    diagnosis: str = Field(
         description="Human-readable name of the condition, e.g. 'Pneumonia, unspecified organism'.",
     )
 
@@ -134,7 +115,7 @@ class DifferentialDiagnosis(Diagnosis):
 
 
 class Assessment(Diagnosis):
-    """The clinician's primary or working diagnosis for the encounter."""
+    """One of the clinician's primary or working diagnoses for the encounter."""
 
 
 class DiagnosesOutput(BaseModel):
@@ -149,8 +130,9 @@ class DiagnosesOutput(BaseModel):
         default_factory=list,
         description="List of possible conditions considered based on the evaluation, including ICD-10 codes.",
     )
-    assessment: Assessment = Field(
-        description="Primary diagnosis or working diagnosis, including ICD-10 codes.",
+    assessment: list[Assessment] = Field(
+        default_factory=list,
+        description="List of primary/working diagnoses considered, including ICD-10 codes.",
     )
 
 
@@ -161,7 +143,7 @@ class ClinicalNote(BaseModel):
         default="",
         description="History of Present Illness narrative for the encounter.",
     )
-    vital_signs: VitalSigns = Field(
+    vitals: VitalSigns = Field(
         default_factory=VitalSigns,
         description="Vital signs measured during the visit.",
     )
@@ -173,8 +155,9 @@ class ClinicalNote(BaseModel):
         default_factory=list,
         description="List of possible conditions considered based on the evaluation, including ICD-10 codes.",
     )
-    assessment: Assessment = Field(
-        description="Primary diagnosis or working diagnosis, including ICD-10 codes.",
+    assessment: list[Assessment] = Field(
+        default_factory=list,
+        description="List of primary/working diagnoses considered, including ICD-10 codes.",
     )
 
 
