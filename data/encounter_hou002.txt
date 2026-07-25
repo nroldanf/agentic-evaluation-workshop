@@ -1,0 +1,144 @@
+ENCOUNTER ID: HOU-002
+LOCATION: The Houses of Healing, Minas Tirith
+PATIENT: Frodo Baggins
+EXAMINER: Aragorn
+PRESENT: Gandalf, Samwise Gamgee, Meriadoc Brandybuck, Peregrin Took, Legolas, Gimli
+
+---
+
+FRODO: (waking slowly, in a bed, clear light coming through the window) Gandalf?
+
+GANDALF: (at the foot of the bed, smiling) I'm here.
+
+FRODO: I thought you were dead.
+
+GANDALF: So did I, for a while.
+
+(Merry and Pippin come running in and throw themselves onto the bed to hug Frodo)
+
+MERRY: He's awake!
+
+PIPPIN: We thought you'd sleep forever.
+
+FRODO: (laughing, a bit overwhelmed) Careful, careful.
+
+(Gimli and Legolas enter, followed by Aragorn)
+
+GIMLI: About time.
+
+LEGOLAS: You look better than we expected, Master Baggins.
+
+(Sam appears last, in the doorway. Frodo sees him and the two of them just look at each other for a moment, saying
+nothing)
+
+ARAGORN: (approaching the bed) Merry, Pippin, give me a moment with him. I want to examine him properly, now that
+he's truly awake.
+
+PIPPIN: (leaving, not entirely convinced) Fine. But we're coming back as soon as you're done.
+
+(Merry and Pippin leave. Gimli and Legolas stay near the door. Sam moves closer to the bed, on the other side from
+Aragorn)
+
+ARAGORN: Frodo. Do you know where you are?
+
+FRODO: You said... Minas Tirith. The Houses of Healing, I think.
+
+ARAGORN: That's right. Do you know how long it's been since they brought you down from the mountain?
+
+FRODO: I have no idea, honestly.
+
+ARAGORN: Several days. You slept through most of it.
+
+SAM: I slept a lot too, but not as much as you, Mr. Frodo.
+
+ARAGORN: Let me see your hand.
+
+FRODO: (looking at it, as if seeing it clearly for the first time) The finger's gone.
+
+ARAGORN: I know. Sam told me what he could.
+
+FRODO: Gollum bit it off. At the end, right before he fell with the Ring.
+
+ARAGORN: (examining the wound) It's healing well, considering everything. I'm going to clean it again and change the
+dressing. Tell me if it hurts.
+
+FRODO: (as Aragorn works) Ah — yes, a little, there.
+
+ARAGORN: Almost done. How do you feel, in general?
+
+FRODO: Tired. Very tired, still.
+
+ARAGORN: And thirst? Hunger?
+
+FRODO: Thirst, a lot. More than I've ever had in my life, though they've given me water since I woke up. Hunger not
+so much, honestly.
+
+SAM: (cutting in) That's putting it mildly. He's barely wanted to eat anything.
+
+FRODO: I don't have much appetite for that yet, Sam.
+
+ARAGORN: We'll work on that, little by little. I also see some minor burns here, on your hands, and a bit on your face.
+From the ash and heat of the mountain.
+
+FRODO: I hadn't noticed until you mentioned it too.
+
+ARAGORN: That's common, when the body was busy with more urgent things. They're not deep, but we'll keep tending them.
+
+ARAGORN: And the shoulder? The old wound, from Weathertop.
+
+FRODO: (thinking it over) That doesn't hurt anymore. Hasn't for a while, honestly. I hadn't even thought about it until
+you mentioned it.
+
+ARAGORN: Good, that's what I was hoping to hear.
+
+ARAGORN: (to Sam, finishing the physical exam) Note the vitals: temperature thirty-seven degrees. Pulse at seventy-eight.
+Respiration sixteen. Blood pressure one hundred over sixty-eight. Oxygen saturation ninety-seven.
+All within expected range, considering everything.
+
+SAM: (writing it down) Noted.
+
+ARAGORN: Tell me, how have you been sleeping, in what you've been awake between sleeping?
+
+FRODO: Not much, apart from that one long sleep. I wake up several times each night.
+
+ARAGORN: Any particular reason? Pain, nightmares?
+
+FRODO: (hesitating) It's hard to explain.
+
+ARAGORN: Take your time.
+
+FRODO: I still feel the weight sometimes. The Ring's, I mean. I know it's gone, that it was destroyed. But I still
+feel it, like it's still there.
+
+ARAGORN: Since when do you feel that?
+
+FRODO: I couldn't say an exact moment. It started somewhere along the road, long before we reached the mountain.
+
+FRODO: And in some of those dreams, I feel like something's watching me. Like the Eye is still there. I still feel
+it a little when I wake up, even though I know the danger's passed.
+
+ARAGORN: Have you talked to anyone else about this? To Sam?
+
+FRODO: A little. I don't want him worrying more than he already is.
+
+SAM: (cutting in) I worry either way, Mr. Frodo, whether you tell me or not.
+
+ARAGORN: I'll make a note of it, so someone can talk this through with you properly, once you've recovered more from
+everything else. It's not something we need to resolve today.
+
+FRODO: All right.
+
+ARAGORN: For now, the most important thing is that you keep eating and resting. We'll see about the rest.
+
+SAM: That's exactly what I've been telling him.
+
+ARAGORN: Good. Then let's start there — Sam, can you get him something to eat, even if it's small?
+
+SAM: (already standing up) Gladly, Mr. Frodo.
+
+GIMLI: (from the doorway) Can we all come back in now, or are you still playing healer?
+
+ARAGORN: (smiling) Almost done, Gimli. Just a moment more.
+
+---
+END OF TRANSCRIPT
