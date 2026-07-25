@@ -1,8 +1,0 @@
-[
-  {"tool": "get_patient_history", "args": {"patient_name": "Frodo Baggins"}},
-  {"tool": "lookup_icd10", "args": {"query": "wound"}},
-  {"tool": "lookup_icd10", "args": {"query": "fever"}},
-  {"tool": "lookup_icd10", "args": {"query": "wraith curse transformation"}},
-  {"tool": "lookup_icd10", "args": {"query": "sepsis"}},
-  {"tool": "lookup_icd10", "args": {"query": "toxic reaction"}}
-]

@@ -48,7 +48,8 @@ ARAGORN: I know. Sam told me what he could.
 
 FRODO: Gollum bit it off. At the end, right before he fell with the Ring.
 
-ARAGORN: It's healing well, considering everything. I'm going to clean it again and change the dressing. Tell me if it hurts.
+ARAGORN: It's healing well, considering everything. I'm going to clean it again and change the dressing. Tell me if
+it hurts.
 
 FRODO: Ah — yes, a little, there.
 
@@ -58,7 +59,8 @@ FRODO: Tired. Very tired, still.
 
 ARAGORN: And thirst? Hunger?
 
-FRODO: Thirst, a lot. More than I've ever had in my life, though they've given me water since I woke up. Hunger not so much, honestly.
+FRODO: Thirst, a lot. More than I've ever had in my life, though they've given me water since I woke up. Hunger not
+so much, honestly.
 
 SAM: That's putting it mildly. He's barely wanted to eat anything.
 
@@ -66,7 +68,8 @@ FRODO: I don't have much appetite for that yet, Sam.
 
 ARAGORN: Open your mouth for me a moment... yes, your mouth is dry. That fits with the thirst.
 
-ARAGORN: Let me note your vitals. Temperature, thirty-seven degrees Celsius. Heart rate, seventy-eight beats per minute. Blood pressure, one hundred over sixty-eight millimeters of mercury. Oxygen saturation, ninety-seven percent.
+ARAGORN: Let me note your vitals. Temperature, thirty-seven degrees Celsius. Heart rate, seventy-eight beats per
+minute. Blood pressure, one hundred over sixty-eight millimeters of mercury. Oxygen saturation, ninety-seven percent.
 
 SAM: Noted.
 
@@ -92,13 +95,15 @@ FRODO: It's hard to explain.
 
 ARAGORN: Take your time.
 
-FRODO: I still feel the weight sometimes. The Ring's, I mean. I know it's gone, that it was destroyed. But I still feel it, like it's still there.
+FRODO: I still feel the weight sometimes. The Ring's, I mean. I know it's gone, that it was destroyed. But I still feel
+ it, like it's still there.
 
 ARAGORN: Since when do you feel that?
 
 FRODO: I couldn't say an exact moment. It started somewhere along the road, long before we reached the mountain.
 
-FRODO: And in some of those dreams, I feel like something's watching me. Like the Eye is still there. I still feel it a little when I wake up, even though I know the danger's passed.
+FRODO: And in some of those dreams, I feel like something's watching me. Like the Eye is still there. I still feel it a
+little when I wake up, even though I know the danger's passed.
 
 ARAGORN: Have you talked to anyone else about this? To Sam?
 
@@ -106,7 +111,9 @@ FRODO: A little. I don't want him worrying more than he already is.
 
 SAM: I worry either way, Mr. Frodo, whether you tell me or not.
 
-ARAGORN: That sounds like a heavy toll to carry, even now that it's over. I'll make a note of it, so someone can talk this through with you properly, once you've recovered more from everything else. It's not something we need to resolve today.
+ARAGORN: That sounds like a heavy toll to carry, even now that it's over. I'll make a note of it, so someone can talk
+this through with you properly, once you've recovered more from everything else. It's not something we need to resolve
+today.
 
 FRODO: All right.
 

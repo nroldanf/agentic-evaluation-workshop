@@ -1,6 +1,0 @@
-[
-  {"tool": "lookup_icd10", "args": {"query": "dehydration"}},
-  {"tool": "lookup_icd10", "args": {"query": "traumatic amputation finger"}},
-  {"tool": "lookup_icd10", "args": {"query": "post-traumatic stress disorder"}},
-  {"tool": "lookup_icd10", "args": {"query": "post-traumatic stress disorder unspecified"}}
-]
