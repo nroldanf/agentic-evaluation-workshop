@@ -16,8 +16,7 @@ ARWEN: Yes. One of them managed to wound him before Aragorn drove them off with 
 
 ELROND: And you weren't there when it happened?
 
-ARWEN: No. I found the group afterward, while they were looking for athelas. By then the wound was already a couple
-of days old.
+ARWEN: No. I found the group afterward, while they were looking for athelas. By then the wound was already a couple of days old.
 
 ELROND: I understand. Do you know exactly what wounded him?
 
@@ -53,8 +52,7 @@ ARWEN: That everything looked pale. Distant. "Like I'm fading," he told me, more
 
 ELROND: And the pain? Where exactly did he feel it?
 
-ARWEN: It started in the shoulder, he said. But he told me he felt the cold moving from there toward his chest, a
-little more each day.
+ARWEN: It started in the shoulder, he said. But he told me he felt the cold moving from there toward his chest, a little more each day.
 
 ELROND: Fever? Chills?
 
@@ -62,8 +60,7 @@ ARWEN: I asked him directly, the last time we spoke clearly. He told me he didn'
 
 ELROND: What did you notice yourself, apart from what he told you?
 
-ARWEN: That he was wrong, or didn't realize. By the time we crossed the Ford he was burning to the touch, and shaking
-without stopping.
+ARWEN: That he was wrong, or didn't realize. By the time we crossed the Ford he was burning to the touch, and shaking without stopping.
 
 ELROND: Good, that's important. Anything else? Did he eat, drink water on the road?
 
@@ -71,41 +68,39 @@ ARWEN: Little, these last two days. He had no appetite or strength for much.
 
 ELROND: And the arm? Did he ever move it in front of you?
 
-ARWEN: Before he lost consciousness he told me it felt weaker than the other. That was one of the last clear things he
- said.
+ARWEN: Before he lost consciousness he told me it felt weaker than the other. That was one of the last clear things he said.
 
-ELROND: Very well. I'm going to examine him now. Tell me if you notice anything while I do.
+ELROND: Very well. Let me have a look at him.
 
-(Elrond removes the makeshift bandage)
+ELROND: Temperature, thirty-eight point one degrees Celsius. Heart rate, one hundred two beats per minute. Respiratory rate, twenty breaths per minute. Blood pressure, one hundred over sixty-five millimeters of mercury. Oxygen saturation, ninety-six percent.
 
-ELROND: The edge of the wound is pale. Almost white. Cold to the touch, even with the rest of the body warm from fever.
+ELROND: Let me check his eyes a moment. Pupils are equal, reactive to light. That's something, at least.
+
+ELROND: Heartbeat's steady. Lungs sound clear, if a little shallow.
+
+ELROND: Now let me remove this bandage.
+
+ELROND: The edge of the wound is pale. Almost white. Cold to the touch, even with the rest of him this warm from fever.
 
 ARWEN: Is that normal?
 
-ELROND: No. A common infection would turn red, swollen, warm around it. This is different. And here — look at this,
-these pale lines running up toward the chest, they shouldn't be there either.
+ELROND: No. A common infection would turn red, swollen, warm around it. This is different. And here — look at this — these pale lines running up toward the chest, they shouldn't be there either.
 
 ARWEN: What does it mean?
 
-ELROND: That the blade left something behind that's still active. Something beyond what Aragorn could treat on the
-road, with what he had at hand.
+ELROND: That the blade left something behind that's still active. Something beyond what Aragorn could treat on the road, with what he had at hand.
 
-ELROND: (to an assistant, still examining) Note this down: temperature thirty-eight point one. Pulse at one hundred
-and two. Respiration twenty per minute. Blood pressure one hundred over sixty-five. Oxygen saturation ninety-six.
+ELROND: Let me try the arm now.
 
-(Elrond examines the left arm, lifting it carefully)
-
-ELROND: No response to stimulus here, right now. Nothing.
+ELROND: Nothing. No response to stimulus at all.
 
 ARWEN: Is that from the pain, or something more?
 
-ELROND: I don't know for certain yet. It could be both. I'm going to clean the wound and immobilize the arm now.
-After that, we can only watch how it develops over the next few hours.
+ELROND: I don't know for certain yet. It could be both. I'm going to clean the wound and immobilize the arm. After that, we can only watch how it develops over the next few hours.
 
 ARWEN: And if he wakes?
 
-ELROND: If he wakes, even for a moment, I want you to call me immediately. Whatever he says, however small it seems,
-I need to know it.
+ELROND: If he wakes, even for a moment, I want you to call me immediately. Whatever he says, however small it seems, I need to know it.
 
 ARWEN: I'll stay with him.
 
