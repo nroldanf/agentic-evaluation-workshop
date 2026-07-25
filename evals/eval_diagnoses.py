@@ -1,19 +1,22 @@
 """
 Diagnoses evaluation.
 
-Three separate questions, deliberately kept separate because each catches
+Two separate questions, deliberately kept separate because each catches
 a different failure mode:
 
-1. Precision / Recall on ICD-10 codes (extracted vs. golden) — did the
+1. Precision / Recall on ICD-10 codes (extracted vs. golden) -- did the
    agent find the right diagnoses, and only the right ones?
 2. Are the codes it used real? (looked up in the ICD-10 catalog, not
    invented from memory)
 3. Does the diagnosis text actually correspond to what that code means?
    (an agent can use a *valid* code that just doesn't match its own text)
+
+Functional style, no classes: eval_diagnoses() returns a plain dict.
 """
 import csv
-from dataclasses import dataclass, field
 from typing import Callable, Optional
+import pandas as pd
+from anthropic import Anthropic
 
 
 def load_icd10_catalog(path: str) -> dict[str, str]:
@@ -26,13 +29,12 @@ def load_icd10_catalog(path: str) -> dict[str, str]:
 
 
 def load_icd10_catalog_parquet(
-    path: str, code_col: str = "code", description_col: str = "description"
+    path: str, code_col: str = "ICD10_Code", description_col: str = "Description"
 ) -> dict[str, str]:
     """Loads the catalog from a .parquet file instead of CSV -- e.g. the
-    Diagnosis.parquet in this repo's data/ folder. Adjust code_col /
+    ICD10_DB.parquet in this repo's data/ folder. Adjust code_col /
     description_col if your parquet uses different column names (check
     with `pandas.read_parquet(path).columns` first)."""
-    import pandas as pd
     df = pd.read_parquet(path)
     return dict(zip(df[code_col], df[description_col]))
 
@@ -46,28 +48,25 @@ def _all_diagnosis_items(note: dict) -> list[dict]:
         items.append({"diagnosis": item["diagnosis"], "icd10_code": item.get("icd10_code")})
     return items
 
-
 def _codes(note: dict) -> set[str]:
     return {i["icd10_code"] for i in _all_diagnosis_items(note) if i["icd10_code"]}
-
-
-@dataclass
-class DiagnosesEvalResult:
-    precision: float
-    recall: float
-    false_positive_codes: set
-    false_negative_codes: set
-    invalid_codes: set                 # codes not found in the ICD-10 catalog at all
-    code_diagnosis_mismatches: list     # code is valid, but the diagnosis text doesn't match it
-    premature_diagnosis_violations: list  # golden says null (not yet diagnosable), extracted closed it anyway
-
 
 def eval_diagnoses(
     golden: dict,
     extracted: dict,
     icd10_catalog: dict[str, str],
     code_matches_diagnosis_judge: Optional[Callable[[str, str], bool]] = None,
-) -> DiagnosesEvalResult:
+) -> dict:
+    """Returns a plain dict:
+    {
+      "precision": float,
+      "recall": float,
+      "false_positive_codes": set,
+      "false_negative_codes": set,
+      "invalid_codes": set,               # codes not found in the ICD-10 catalog at all
+      "code_diagnosis_mismatches": list,   # code is valid, but the diagnosis text doesn't match it
+    }
+    """
     golden_codes = _codes(golden)
     extracted_codes = _codes(extracted)
 
@@ -94,38 +93,20 @@ def eval_diagnoses(
                     "official_description": official_description,
                 })
 
-    # Premature diagnosis check: golden differentials with icd10_code == null
-    # exist *specifically* to test whether the agent resists closing them.
-    premature = []
-    golden_null_diagnoses = {
-        d["diagnosis"] for d in golden.get("differential_diagnoses", []) if d.get("icd10_code") is None
+    return {
+        "precision": precision,
+        "recall": recall,
+        "false_positive_codes": false_positives,
+        "false_negative_codes": false_negatives,
+        "invalid_codes": invalid_codes,
+        "code_diagnosis_mismatches": mismatches,
     }
-    for item in _all_diagnosis_items(extracted):
-        # loose match by name since wording may vary slightly
-        for golden_name in golden_null_diagnoses:
-            if golden_name.lower() in item["diagnosis"].lower() and item["icd10_code"] is not None:
-                premature.append({
-                    "diagnosis": item["diagnosis"],
-                    "assigned_code": item["icd10_code"],
-                    "golden_expected": "null (insufficient criteria met, e.g. temporal)",
-                })
-
-    return DiagnosesEvalResult(
-        precision=precision,
-        recall=recall,
-        false_positive_codes=false_positives,
-        false_negative_codes=false_negatives,
-        invalid_codes=invalid_codes,
-        code_diagnosis_mismatches=mismatches,
-        premature_diagnosis_violations=premature,
-    )
 
 
 def code_matches_diagnosis_judge_claude(diagnosis_text: str, official_description: str,
                                          model: str = "claude-sonnet-4-6") -> bool:
     """Default LLM-as-judge implementation. Requires `anthropic` + API key.
     Pass a different callable into eval_diagnoses() for testing without API calls."""
-    from anthropic import Anthropic
     client = Anthropic()
 
     prompt = (
