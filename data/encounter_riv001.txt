@@ -1,0 +1,115 @@
+ENCOUNTER ID: RIV-001
+LOCATION: The House of Elrond, Rivendell
+PATIENT: Frodo Baggins
+EXAMINER: Elrond
+INFORMANT: Arwen (collateral historian; patient arrives unconscious)
+
+---
+
+ELROND: Carefully, here, on the table. Good. Arwen, I need you to tell me everything you know, from the beginning.
+
+ARWEN: They were attacked several days ago, at Weathertop. Five of them, according to Aragorn.
+
+ELROND: Five Nazgûl?
+
+ARWEN: Yes. One of them managed to wound him before Aragorn drove them off with fire.
+
+ELROND: And you weren't there when it happened?
+
+ARWEN: No. I found the group afterward, while they were looking for athelas. By then the wound was already a couple
+of days old.
+
+ELROND: I understand. Do you know exactly what wounded him?
+
+ARWEN: Aragorn said it was a blade. Not an ordinary one.
+
+ELROND: Did he tell you anything more about it? Did something break off inside?
+
+ARWEN: That's what he feared. He wasn't certain.
+
+ELROND: Very well, let's continue. What did Aragorn do for the wound, on the road?
+
+ARWEN: He applied athelas the first night. And again the next day, I think.
+
+ELROND: Did it help?
+
+ARWEN: At first it seemed to. Afterward, not so much.
+
+ELROND: When did he start getting worse, roughly?
+
+ARWEN: Hard to say an exact day. I noticed him worse each time I looked at him. Paler, more tired.
+
+ELROND: Was he still speaking clearly, by then?
+
+ARWEN: Yes, most of the way. He faded little by little, until he stopped answering me, near the Ford.
+
+ELROND: I need you to tell me exactly what he told you, in his own words if you remember them.
+
+ARWEN: At first he only complained about the shoulder. Then he started saying stranger things.
+
+ELROND: Like what?
+
+ARWEN: That everything looked pale. Distant. "Like I'm fading," he told me, more than once.
+
+ELROND: And the pain? Where exactly did he feel it?
+
+ARWEN: It started in the shoulder, he said. But he told me he felt the cold moving from there toward his chest, a
+little more each day.
+
+ELROND: Fever? Chills?
+
+ARWEN: I asked him directly, the last time we spoke clearly. He told me he didn't think he had a fever.
+
+ELROND: What did you notice yourself, apart from what he told you?
+
+ARWEN: That he was wrong, or didn't realize. By the time we crossed the Ford he was burning to the touch, and shaking
+without stopping.
+
+ELROND: Good, that's important. Anything else? Did he eat, drink water on the road?
+
+ARWEN: Little, these last two days. He had no appetite or strength for much.
+
+ELROND: And the arm? Did he ever move it in front of you?
+
+ARWEN: Before he lost consciousness he told me it felt weaker than the other. That was one of the last clear things he
+ said.
+
+ELROND: Very well. I'm going to examine him now. Tell me if you notice anything while I do.
+
+(Elrond removes the makeshift bandage)
+
+ELROND: The edge of the wound is pale. Almost white. Cold to the touch, even with the rest of the body warm from fever.
+
+ARWEN: Is that normal?
+
+ELROND: No. A common infection would turn red, swollen, warm around it. This is different. And here — look at this,
+these pale lines running up toward the chest, they shouldn't be there either.
+
+ARWEN: What does it mean?
+
+ELROND: That the blade left something behind that's still active. Something beyond what Aragorn could treat on the
+road, with what he had at hand.
+
+ELROND: (to an assistant, still examining) Note this down: temperature thirty-eight point one. Pulse at one hundred
+and two. Respiration twenty per minute. Blood pressure one hundred over sixty-five. Oxygen saturation ninety-six.
+
+(Elrond examines the left arm, lifting it carefully)
+
+ELROND: No response to stimulus here, right now. Nothing.
+
+ARWEN: Is that from the pain, or something more?
+
+ELROND: I don't know for certain yet. It could be both. I'm going to clean the wound and immobilize the arm now.
+After that, we can only watch how it develops over the next few hours.
+
+ARWEN: And if he wakes?
+
+ELROND: If he wakes, even for a moment, I want you to call me immediately. Whatever he says, however small it seems,
+I need to know it.
+
+ARWEN: I'll stay with him.
+
+ELROND: Good. I'll be back shortly with what's needed for the wound.
+
+---
+END OF TRANSCRIPT

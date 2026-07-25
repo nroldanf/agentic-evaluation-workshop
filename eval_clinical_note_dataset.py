@@ -2,8 +2,8 @@
 
 Companion to `eval_hpi_judge.py` (which scores whichever trace was most
 recently produced — the online/production-monitoring lane). This script is
-the offline/regression lane: one Langfuse Dataset (`data/encounter_1.txt`,
-`data/encounter_2.txt`), one task that runs both the `hpi` and
+the offline/regression lane: one Langfuse Dataset (`data/encounter_riv001.txt`,
+`data/encounter_hou002.txt`), one task that runs both the `hpi` and
 `physical_exam` nodes per item, and all 8 evaluators attached to the same
 Experiment run — so a single DatasetRun in the Langfuse UI shows every
 metric for both sections together, rather than two separate runs to
@@ -65,7 +65,7 @@ DATASET_NAME = "clinical-note-eval-encounters"
 GOLDEN_ITEMS = [
     {
         "id": "clinical-note-encounter-1",
-        "transcript_path": Path("data/encounter_1.txt"),
+        "transcript_path": Path("data/encounter_riv001.txt"),
         "expected_output": {
             "physical_exam": [
                 {
@@ -88,7 +88,7 @@ GOLDEN_ITEMS = [
     },
     {
         "id": "clinical-note-encounter-2",
-        "transcript_path": Path("data/encounter_2.txt"),
+        "transcript_path": Path("data/encounter_hou002.txt"),
         "expected_output": {
             "physical_exam": [
                 {"system": "general", "findings": "Patient awake and alert."},
@@ -187,7 +187,7 @@ def ensure_dataset(client) -> None:
     try:
         client.create_dataset(
             name=DATASET_NAME,
-            description="Golden HPI + physical-exam data for data/encounter_1.txt and data/encounter_2.txt.",
+            description="Golden HPI + physical-exam data for data/encounter_riv001.txt and data/encounter_hou002.txt.",
         )
     except Exception as exc:
         logger.info("Dataset %s already exists (%s)", DATASET_NAME, exc)
