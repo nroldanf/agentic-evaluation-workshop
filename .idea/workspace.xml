@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="5da34930-f956-4242-a148-d349762efb09" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/data/golden/golden_encounter_hou002.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/golden/extracted_encounter_1_bad.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/golden/extracted_encounter_1_good.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/golden/extracted_encounter_2_bad.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/golden/extracted_encounter_2_good.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/golden/gold_encounter_2.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/golden/golden_case_bilbo_trivial.json" beforeDir="false" afterPath="$PROJECT_DIR$/data/golden/golden_case_bilbo_trivial.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/golden/golden_encounter_1.json" beforeDir="false" afterPath="$PROJECT_DIR$/data/golden/golden_encounter_riv001.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/golden/golden_encounter_2.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/golden/trace_bilbo_efficient.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/golden/trace_bilbo_inefficient.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/golden/trace_encounter_1_bad.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/golden/trace_encounter_1_good.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/golden/trace_encounter_2_bad.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/golden/trace_encounter_2_good.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/eval_walkthrough.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/eval_walkthrough.ipynb" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="CopilotPersistence">
+    <persistenceIdMap>
+      <entry key="_/Users/mariarojas/Desktop/agentic-evaluation-workshop" value="3Ge2xuvYTtRh2Xpxaj34YlinhPc" />
+    </persistenceIdMap>
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Jupyter Notebook" />
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;mariarojasc&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;git@github.com:nroldanf/agentic-evaluation-workshop.git&quot;,
+    &quot;accountId&quot;: &quot;009a75fd-d1e1-49bc-8639-ad5a37fb63ce&quot;
+  }
+}</component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 8
+}</component>
+  <component name="ProjectId" id="3Ge2xuvYTtRh2Xpxaj34YlinhPc" />
+  <component name="ProjectSessionTemplates">
+    <option name="panelTemplate">
+      <template>
+        <option name="modeId" value="Agent" />
+        <option name="model">
+          <model>
+            <option name="modelType" value="builtin_id" />
+            <option name="modelValue" value="auto" />
+          </model>
+        </option>
+        <option name="targetType" value="BACKGROUND" />
+        <option name="worktreeMode" value="WORKSPACE" />
+      </template>
+    </option>
+  </component>
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1&quot;: &quot;true&quot;,
+    &quot;copilot.chat.legacySessionMetadata.migrated&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;fix/re-update-encounter-transcripts&quot;,
+    &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/Users/mariarojas/Desktop/agentic-evaluation-workshop&quot;,
+    &quot;to.speed.mode.migration.done&quot;: &quot;true&quot;
+  }
+}</component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/evals" />
+      <recent name="$PROJECT_DIR$" />
+      <recent name="$PROJECT_DIR$/data/golden" />
+    </key>
+  </component>
+  <component name="RunManager">
+    <configuration name="main" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
+      <module name="agentic-evaluation-workshop" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/main.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-python-sdk-4e2b1448bda8-9a97661f3031-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-252.27397.106" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="5da34930-f956-4242-a148-d349762efb09" name="Changes" comment="" />
+      <created>1784317963585</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1784317963585</updated>
+      <workItem from="1784385684347" duration="10000" />
+      <workItem from="1784385765211" duration="31539000" />
+    </task>
+    <servers />
+  </component>
+  <component name="github-copilot-workspace">
+    <instructionFileLocations>
+      <option value=".github/instructions" />
+    </instructionFileLocations>
+    <promptFileLocations>
+      <option value=".github/prompts" />
+    </promptFileLocations>
+  </component>
+</project>

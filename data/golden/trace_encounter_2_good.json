@@ -1,7 +1,0 @@
-[
-  {"tool": "get_patient_history", "args": {"patient_name": "Frodo Baggins"}},
-  {"tool": "lookup_icd10", "args": {"query": "dehydration severe"}},
-  {"tool": "lookup_icd10", "args": {"query": "traumatic amputation finger"}},
-  {"tool": "lookup_icd10", "args": {"query": "acute stress reaction"}},
-  {"tool": "lookup_icd10", "args": {"query": "malnutrition moderate"}}
-]

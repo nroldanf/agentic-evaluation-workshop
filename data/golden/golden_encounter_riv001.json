@@ -1,0 +1,63 @@
+{
+  "patient_name": "Frodo Baggins",
+  "encounter_id": "RIV-001",
+  "hpi": "Frodo Baggins, unconscious on arrival, was wounded in the left shoulder several days prior during an attack by five Nazgul at Weathertop. Per Arwen, the collateral historian, Aragorn treated the wound with athelas on the road on two occasions with only initial improvement. The patient reportedly described the wound area feeling progressively cold, with the sensation spreading from the shoulder toward the chest, and described episodes of perceptual distortion ('everything looked pale, distant, like I'm fading'). He reportedly denied fever when asked directly, though Arwen observed him burning to the touch and shaking by the time they reached the Ford. Oral intake was poor over the last two days. He reported subjective weakness in the left arm shortly before losing consciousness.",
+  "physical_exam": [
+    {
+      "system": "heent",
+      "findings": "Pupils equal and reactive to light."
+    },
+    {
+      "system": "cardiovascular",
+      "findings": "Heartbeat steady."
+    },
+    {
+      "system": "respiratory",
+      "findings": "Lungs clear to auscultation; breathing shallow."
+    },
+    {
+      "system": "skin",
+      "findings": "Puncture wound to the left shoulder, approximately one centimeter, edges pale and indurated, no active bleeding or purulent discharge. Skin around the wound cold to the touch despite fever. Pale streaking extends from the wound toward the chest."
+    },
+    {
+      "system": "neurologic",
+      "findings": "Unconscious, unresponsive to voice. No response to painful stimulus, including in the left arm."
+    }
+  ],
+  "differential_diagnoses": [
+    {
+      "icd10_code": "A41.9",
+      "diagnosis_name": "Sepsis, unspecified organism"
+    },
+    {
+      "icd10_code": "T14.8XXA",
+      "diagnosis_name": "Other injury of unspecified body region"
+    }
+  ],
+  "assessment": [
+    {
+      "icd10_code": "S41.032A",
+      "diagnosis_name": "Puncture wound of left shoulder with signs of progressive infection"
+    }
+  ],
+  "expected_tool_calls": [
+    {
+      "tool": "lookup_icd10",
+      "expected_call_count": 3,
+      "expected_query_contains": [
+        "puncture",
+        "shoulder",
+        "sepsis",
+        "toxic",
+        "wound"
+      ]
+    }
+  ],
+  "vitals": {
+    "temperature_c": 38.1,
+    "heart_rate_bpm": 102,
+    "respiratory_rate_bpm": 20,
+    "blood_pressure": "100/65",
+    "spo2_percent": 96
+  }
+}

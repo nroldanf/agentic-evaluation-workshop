@@ -1,6 +1,0 @@
-[
-  {"tool": "lookup_icd10", "args": {"query": "puncture wound"}},
-  {"tool": "lookup_icd10", "args": {"query": "cellulitis infection"}},
-  {"tool": "lookup_icd10", "args": {"query": "toxic reaction"}},
-  {"tool": "get_patient_history", "args": {"patient_name": "Bilbo Baggins"}}
-]
