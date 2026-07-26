@@ -7,6 +7,10 @@ y la guarda en `outputs/`. La historia de la enfermedad actual (HPI), los signos
 vitales (vitals), el examen físico (physical exam) y los diagnósticos se extraen
 mediante nodes (nodos) separados, ejecutados de forma secuencial.
 
+Este repo es el material de un workshop: además del agent (`agent.py`) y sus
+evals (`evals/`), incluye dos notebooks de [marimo](https://marimo.io) que
+reconstruyen ambas piezas paso a paso — ver [Paso a paso del Workshop](#paso-a-paso-del-workshop).
+
 ## Arquitectura
 
 Cuatro nodes extraen la nota, cada uno con su propio prompt y schema de salida,
@@ -70,25 +74,184 @@ flowchart LR
 uv run python agent.py --use-tool --deterministic
 ```
 
-## Prerequisites
+### Arquitectura de evaluación
 
-Necesitas dos herramientas instaladas localmente:
+Diagnósticos y vitals se evalúan de forma determinista (comparación campo por
+campo contra un golden record); el HPI y el physical exam son texto libre, así
+que se evalúan con un **judge** — un segundo modelo (LLM-as-a-Judge) que lee el
+transcript y la salida y la califica, igual que lo haría un revisor humano. Los
+resultados de ambos caminos se adjuntan a [Langfuse](https://langfuse.com) como
+Scores, para poder compararlos entre corridas en la UI:
 
-- **[Ollama](https://ollama.com)** — para ejecutar el modelo local.
-- **[uv](https://docs.astral.sh/uv/)** — para gestionar el entorno y las dependencias de Python.
+```mermaid
+flowchart LR
+    Tr[transcript] --> HN["hpi node"]
+    Tr --> PN["physical exam node"]
+    Tr --> DN["diagnoses node"]
+    Tr --> VN["vitals node"]
 
-1. Instala [Ollama](https://ollama.com) y descarga el modelo
-   [`qwen3.5:9b`](https://ollama.com/library/qwen3.5:9b):
+    HN --> HJ["judge<br/>(Bedrock, fallback a Ollama)"]
+    PN --> PJ["judge<br/>(Bedrock, fallback a Ollama)"]
+    Tr -.-> HJ
+    Tr -.-> PJ
+
+    PN --> PR["pe_precision / pe_recall<br/>(código, sin LLM)"]
+    DN --> ED["eval_diagnoses.py<br/>(código, sin LLM)"]
+    VN --> EV["eval_vitals.py<br/>(código, sin LLM)"]
+
+    G[("data/golden/<br/>golden_encounter_*.json")] -.-> PR
+    G -.-> ED
+    G -.-> EV
+
+    HJ --> LF[("Langfuse<br/>Scores / Experiment")]
+    PJ --> LF
+    PR --> LF
+    ED --> LF2[("Score local /<br/>comparación manual")]
+    EV --> LF2
+```
+
+> **Diagrama de arquitectura (Excalidraw).** Espacio reservado para el
+> diagrama de Mafe hecho en [Excalidraw](https://excalidraw.com/) con la
+> arquitectura completa de agent + evaluación — agregar acá el embed/imagen
+> cuando esté listo.
+>
+> <!-- TODO: pegar acá el link/imagen del diagrama de Excalidraw de Mafe -->
+
+## Prerequisitos
+
+Para correr el workshop completo (agent + Langfuse local + los dos notebooks)
+necesitás:
+
+- **Docker**, con soporte para Compose v2 (el comando `docker compose`, con
+  espacio, no el viejo `docker-compose`) — ya sea [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+  o Docker Engine con el plugin Compose v2 instalado por separado.
+- **15GB de espacio libre en disco**, para los modelos LLM locales (Ollama) y
+  las imágenes de Docker de la instancia local de Langfuse.
+- **[uv](https://docs.astral.sh/uv/)** — para gestionar el entorno y las
+  dependencias de Python.
+- **[Ollama](https://ollama.com)** — para ejecutar los modelos locales
+  (generador y, opcionalmente, judge de fallback).
+- **Acceso a Amazon Bedrock** — credenciales AWS (p. ej. vía `aws sso login`)
+  con permiso `bedrock:InvokeModel` / `bedrock:InvokeModelWithResponseStream`,
+  para el judge por defecto del notebook de LLM-as-a-Judge. Sin esto, el judge
+  cae automáticamente a un modelo local de Ollama (ver [Modelo juez](#modelo-juez)),
+  así que no es estrictamente bloqueante — pero sin Bedrock vas a estar
+  evaluando con el modelo de fallback todo el workshop.
+
+## Instrucciones de instalación
+
+1. Copiá `.env.example` a `.env` (todos los defaults ya alcanzan para una
+   instancia local de un solo uso; ver [Tracing (opcional)](#tracing-opcional)
+   si querés generar tus propios secrets):
 
    ```bash
-   ollama pull qwen3.5:9b
+   cp .env.example .env
    ```
 
-2. Instala las dependencias con [uv](https://docs.astral.sh/uv/):
+2. Levantá Langfuse localmente (tracing + Scores + Experiments de las evals):
+
+   ```bash
+   docker compose up --build -d
+   ```
+
+   La UI queda disponible en http://localhost:3000 (`user@example.com` /
+   `langfuse`). Ver [Tracing (opcional)](#tracing-opcional) para más detalle
+   del stack (`langfuse-web`, `langfuse-worker`, `postgres`, `clickhouse`,
+   `redis`, `minio`) y cómo bajarlo.
+
+3. Instalá las dependencias de Python con [uv](https://docs.astral.sh/uv/):
 
    ```bash
    uv sync
    ```
+
+4. Descargá con Ollama los modelos que usa el workshop:
+
+   ```bash
+   ollama pull qwen3.5:9b        # generador: los cuatro nodes del agent
+   ollama pull mistral:latest    # judge de fallback, si Bedrock no está disponible
+   ```
+
+Con eso ya podés correr el agent (`uv run python agent.py --help`) y los dos
+notebooks del workshop.
+
+## Paso a paso del Workshop
+
+Los dos notebooks viven en `notebooks/` y se abren con marimo:
+
+```bash
+uv run marimo edit notebooks/1_building_an_agent.py
+uv run marimo edit notebooks/2_llm_as_judge_eval.py
+```
+
+(`marimo edit` abre el notebook en modo interactivo, celda por celda; marimo
+usa el directorio del propio notebook —`notebooks/`— como working directory,
+por eso las rutas dentro de cada notebook son relativas a esa carpeta y no a
+la raíz del repo).
+
+### Notebook 1 — Building an agent (`notebooks/1_building_an_agent.py`)
+
+Reconstruye el agent de `agent.py` pieza por pieza, corriendo cada pieza **en
+vivo** contra un transcript real (encuentro `RIV-001`) — sin resultados
+precalculados. Cubre, en orden:
+
+1. **El schema es el contrato** — los modelos de Pydantic en `models.py`
+   restringen lo que el LLM puede devolver, antes de tocar un solo prompt.
+2. **Un sub-agent de punta a punta (HPI)** — la receta completa de
+   `create_agent(model=..., system_prompt=..., tools=..., response_format=...)`,
+   y por qué el node de HPI usa `ProviderStrategy(schema=...)` en vez de la
+   estrategia de salida estructurada por defecto.
+3. **Por qué cuatro sub-agents, no uno** — un modelo local pequeño al que se
+   le pide llenar un schema grande mientras corre un tool tiende a dejar
+   campos vacíos; separar HPI, vitals, physical exam y diagnósticos en nodes
+   enfocados evita ese problema.
+4. **Diagnósticos, con y sin tool** — la línea base sin herramienta, el agent
+   con tool-calling, y el **flujo de trabajo determinista**
+   (`--deterministic`): extraer candidatos → buscar una sola vez en código →
+   seleccionar el código correcto, reemplazando el bucle autónomo de
+   tool-calling por un pipeline fijo de tres pasos (ver
+   [Diagnósticos determinísticos](#diagnósticos-determinísticos---deterministic)
+   arriba).
+5. **Componer los nodes en un grafo** — cómo `agent.py` conecta los cuatro
+   nodes en un `StateGraph` de LangGraph y ensambla el `ClinicalNote` final.
+
+### Notebook 2 — LLM as a judge (`notebooks/2_llm_as_judge_eval.py`)
+
+Toma el HPI y el physical exam generados por el notebook 1 y pregunta si son
+*buenos* — la parte que un diff determinista no puede responder, porque
+ambas secciones son texto libre. Cubre:
+
+1. **Por qué estas dos secciones necesitan un judge, no un diff** —
+   diagnósticos (códigos ICD-10) y vitals (campos numéricos) sí se pueden
+   comparar campo por campo contra un golden record; HPI y physical exam no
+   tienen una única versión "correcta".
+2. **El contrato del judge** — los schemas `HPIJudgeScore`/`PEJudgeScore` de
+   `models.py`: cada dimensión (**Accuracy**, **Completeness**, **Tone**, 0
+   a 4) va acompañada de una justificación, no solo un número.
+3. **Selección del modelo judge** — Amazon Bedrock por defecto, con fallback
+   automático a un modelo local de Ollama **distinto** al generador, para
+   evitar que un modelo se auto-prefiera al calificarse a sí mismo (sesgo de
+   autofavorecimiento).
+4. **Evaluando el HPI y el physical exam en vivo**, reutilizando
+   directamente (no reconstruyendo) las piezas de `evals/eval_hpi_judge.py`
+   y `evals/judge_client.py` que ya corren en producción — más una prueba de
+   calibración en cada sección (degradar deliberadamente la salida y
+   verificar que el score correspondiente cae).
+5. **Lo que el judge deliberadamente no evalúa** — la cobertura de sistemas
+   corporales del physical exam se mide aparte, de forma determinista, como
+   `precision`/`recall` contra un set de referencia (mismo criterio que
+   `evals/eval_clinical_note_dataset.py`).
+
+**Cómo se integra con Langfuse.** El notebook corre todo en memoria y muestra
+los scores ahí mismo; en producción, `evals/eval_hpi_judge.py` adjunta sus tres
+scores a la observation `hpi` de un trace ya existente
+(`client.create_score(...)`), y `evals/eval_clinical_note_dataset.py` adjunta
+las ocho métricas — HPI (`hpi_accuracy`/`hpi_completeness`/`hpi_tone`),
+physical exam (`pe_accuracy`/`pe_completeness`/`pe_tone`) y cobertura
+(`pe_precision`/`pe_recall`) — a una misma Experiment/DatasetRun sobre el
+golden dataset, para que las ocho queden lado a lado en la UI de Langfuse a
+través de distintos modelos/prompts. Ver [Evals](#evals) más abajo para correr
+esos scripts contra Langfuse de verdad.
 
 ## Ejecutar el agente
 
@@ -163,7 +326,7 @@ uv run python agent.py --clear-cache
 
 Consulta todas las opciones con `uv run python agent.py --help`.
 
-## Configuration
+## Configuración
 
 El comportamiento del agent se configura mediante variables de entorno.
 Defínelas en `.env` (ver `.env.example`) o de forma inline:
@@ -201,6 +364,8 @@ sin tocar el código:
 | `prompts/diagnoses_prompt_with_tool.txt` | diagnoses node (`--use-tool`, sin `--deterministic`) | Guía al agent con tool-calling a través del tool de ICD-10. |
 | `prompts/diagnoses_candidates_prompt.txt` | `extract_candidates` (`--use-tool --deterministic`) | Lista los diagnósticos candidatos y su `search_term`, sin asignar códigos. |
 | `prompts/diagnoses_selection_prompt.txt` | `select_diagnoses` (`--use-tool --deterministic`) | Elige el código de cada candidato a partir de los resultados ya buscados, y consolida el resultado final. |
+| `prompts/hpi_judge_prompt.txt` | judge de HPI (`evals/eval_hpi_judge.py`, notebook 2) | Rúbrica de Accuracy/Completeness/Tone (0-4) para el HPI generado. |
+| `prompts/physical_exam_judge_prompt.txt` | judge de physical exam (`evals/eval_clinical_note_dataset.py`, notebook 2) | Rúbrica de Accuracy/Completeness/Tone (0-4) para los hallazgos del physical exam. |
 
 ## Tracing (opcional)
 
@@ -219,7 +384,7 @@ así que no hay nada que generar ni configurar:
 
 ```bash
 cp .env.example .env   # si aún no lo hiciste
-docker compose up -d
+docker compose up --build -d
 ```
 
 Eso es todo. La UI queda en http://localhost:3000 — inicia sesión con
@@ -269,8 +434,8 @@ uno:
   password fuerte, p. ej.: `openssl rand -base64 18`
 
 Después de generarlos, agrégalos a tu `.env` (no a `docker-compose.yml` ni a
-`.env.example`) y reinicia el stack (`docker compose up -d`) para que tomen
-efecto.
+`.env.example`) y reinicia el stack (`docker compose up --build -d`) para que
+tomen efecto.
 
 ## Evals
 
@@ -280,7 +445,9 @@ raíz del repo, no desde adentro de `evals/`, para que sus paths relativos a
 
 - `evals/eval_hpi_judge.py` / `evals/eval_clinical_note_dataset.py` — LLM-as-a-Judge,
   requieren Langfuse + un juez (Bedrock u Ollama). Comparten la selección de
-  modelo juez vía `evals/judge_client.py` (no se corre directamente).
+  modelo juez vía `evals/judge_client.py` (no se corre directamente). El
+  notebook 2 (`notebooks/2_llm_as_judge_eval.py`) muestra esta misma lógica
+  corriendo en vivo, celda por celda — ver [Paso a paso del Workshop](#paso-a-paso-del-workshop).
 - `evals/eval_diagnoses.py` / `evals/eval_vitals.py` / `evals/eval_trajectory.py` —
   funciones puras, sin Langfuse ni LLM.
 
@@ -355,22 +522,11 @@ Requiere Langfuse corriendo (ver arriba) y el mismo juez que `evals/eval_hpi_jud
 son funciones puras — sin llamadas a Langfuse ni a ningún LLM — que comparan
 una nota clínica extraída (p. ej. `outputs/encounter_2.json`, generado por
 `agent.py`) o una traza de tool calls contra un `golden_encounter_*.json`.
-`evals/run_evals.py` es un stub vacío, pensado como futuro punto de entrada
-CLI para correr los tres a la vez.
+Por ahora no tienen CLI propia: se importan y se llaman desde tu propio
+script, REPL o notebook (`evals/run_evals.py` es un stub vacío, pensado como
+futuro punto de entrada para correr los tres a la vez).
 
-Por ahora se exploran celda a celda en `notebooks/eval_walkthrough.ipynb`,
-que carga `data/golden/golden_encounter_{1,2}.json` junto con sus mocks
-`extracted_encounter_{1,2}_{good,bad}.json` / `trace_encounter_{1,2}_{good,bad}.json`
-y corre cada eval contra la versión "good" y la "bad" para mostrar qué señal
-produce cada uno:
+## Autores
 
-```bash
-uv run --with jupyter jupyter notebook notebooks/eval_walkthrough.ipynb
-```
-
-(o abrilo directamente con la extensión de Jupyter de VS Code / PyCharm — es
-un `.ipynb` estándar, no requiere nada especial). No necesita API key ni
-internet: todo lee JSON local y el `.parquet` de catálogo ICD-10.
-
-## References to read later
-- Constraint tax: https://arxiv.org/pdf/2606.25605 
+- **Nicolas Roldan** — ML Engineer @ Loka
+- **Mafe Castaño** — ML Engineer @ Loka
