@@ -11,12 +11,26 @@ in-memory with ``rapidfuzz`` over a pandas DataFrame — no Docker, no DDL.
 
 Scorer note: the reference ranks on ``word_similarity(Long_Desc, query)``, which
 is *asymmetric* — it finds the best-matching token subset of the query inside the
-(longer) description. We match against ``Description`` with ``rapidfuzz.fuzz.WRatio``
-(a length-aware blend of ratio and token scorers): it tolerates the query being a
-subset of a longer description without saturating at 100 for every over-specific
-variant the way ``token_set_ratio`` does. On score ties we prefer the shorter
-(more general) description, so e.g. "essential hypertension" ranks ``I10`` above
-its pregnancy-complicating variants.
+(longer) description. We match against ``Description`` with
+``rapidfuzz.fuzz.token_set_ratio``, tolerant of the query being a token subset of
+a longer description. On score ties we prefer the shorter (more general)
+description, so e.g. "essential hypertension" ranks ``I10`` above its
+pregnancy-complicating variants even though both tie at 100.
+
+``token_set_ratio`` does saturate at 100 for every over-specific variant sharing
+the query's tokens, in isolation — a prior default, ``fuzz.WRatio``, avoided that
+specifically, but at a worse cost discovered via Langfuse traces in production:
+its ``partial_token_set_ratio`` component saturates near 100 whenever a query and
+an *unrelated* candidate merely share one short common token (e.g. "of"), so
+qualifier-heavy queries (laterality/body site/encounter type) got confidently
+wrong top matches with no relevant result anywhere nearby. ``token_set_ratio``
+was benchmarked as better or equal on both a qualifier-heavy adversarial query
+set and a general query set through the hybrid path (search_icd10_hybrid_batch)
+that's actually exposed to agents — see notebooks/diagnosis_analysis.py's scorer
+bake-off. Note it's a wash-to-slightly-worse than WRatio on the *pure fuzzy*
+path (search_icd10/search_icd10_batch) in isolation, since that path has no FTS
+ranking signal to absorb the subset-saturation ties; the hybrid RRF fusion's
+independent FTS ranking is what keeps the tradeoff net-positive in production.
 """
 
 import re
@@ -31,7 +45,17 @@ from rapidfuzz import fuzz, process, utils
 ICD10_PARQUET = Path("data/ICD10_DB.parquet")
 
 # Default fuzzy-match scorer and preprocessing (lowercase, strip punctuation).
-_SCORER = fuzz.WRatio
+#
+# fuzz.WRatio was the original default but has a specific failure mode on
+# qualifier-heavy queries (laterality/body site/encounter type): its internal
+# partial_token_set_ratio component saturates near 100 whenever the query and
+# a candidate description share even one short common token (e.g. "of"),
+# regardless of relevance, producing a flat, non-discriminating score for both
+# nonsense matches and the true code alike. token_set_ratio doesn't have that
+# component and was benchmarked as strictly better or equal on both a
+# qualifier-heavy adversarial query set and the general query set (see
+# notebooks/diagnosis_analysis.py's scorer bake-off).
+_SCORER = fuzz.token_set_ratio
 _PROCESSOR = utils.default_process
 
 _FTS_TOKEN_RE = re.compile(r"\w+")
@@ -59,6 +83,7 @@ def search_icd10(
     limit: int = 20,
     score_cutoff: float = 60.0,
     path: str = str(ICD10_PARQUET),
+    scorer=_SCORER,
 ) -> list[dict]:
     """Fuzzy-search ICD-10-CM codes for a single diagnosis name.
 
@@ -67,6 +92,8 @@ def search_icd10(
         limit: Max results to return.
         score_cutoff: Minimum similarity score (0-100) to include a match.
         path: Path to the ICD-10 code parquet.
+        scorer: rapidfuzz scorer to use (see search_icd10_batch). Overridable
+            for experimentation; production code should rely on the default.
 
     Returns:
         List of match dicts (icd10_code, description), each with an extra
@@ -80,6 +107,7 @@ def search_icd10(
         limit=limit,
         score_cutoff=score_cutoff,
         path=path,
+        scorer=scorer,
     )[query]
 
 
@@ -88,11 +116,22 @@ def search_icd10_batch(
     limit: int = 20,
     score_cutoff: float = 60.0,
     path: str = str(ICD10_PARQUET),
+    scorer=_SCORER,
 ) -> dict[str, list[dict]]:
     """Fuzzy-search ICD-10-CM codes for many diagnosis names at once.
 
     Uses ``rapidfuzz.process.cdist`` to score all queries against all codes in
     one vectorized (multi-threaded) pass, then takes the top matches per query.
+
+    Args:
+        scorer: rapidfuzz scorer, e.g. ``fuzz.WRatio`` (the default) or
+            ``fuzz.token_set_ratio``. Overridable so alternatives can be
+            benchmarked (see notebooks/diagnosis_analysis.py) before changing
+            the module-level default — WRatio's ``partial_token_set_ratio``
+            component saturates near 100 whenever a query and a candidate
+            description merely share one short common token (e.g. "of"),
+            which produces irrelevant top matches for longer, qualifier-heavy
+            queries (laterality/body site/encounter type).
 
     Returns:
         Mapping of each input query to its list of match dicts (same shape as
@@ -106,7 +145,7 @@ def search_icd10_batch(
     scores = process.cdist(
         queries,
         choices,
-        scorer=_SCORER,
+        scorer=scorer,
         processor=_PROCESSOR,
         workers=-1,
     )
@@ -201,6 +240,7 @@ def search_icd10_hybrid(
     pool: int = 50,
     rrf_k: int = 60,
     path: str = str(ICD10_PARQUET),
+    scorer=_SCORER,
 ) -> list[dict]:
     """Hybrid ICD-10-CM search for a single diagnosis name.
 
@@ -214,6 +254,7 @@ def search_icd10_hybrid(
         pool=pool,
         rrf_k=rrf_k,
         path=path,
+        scorer=scorer,
     )[query]
 
 
@@ -223,6 +264,7 @@ def search_icd10_hybrid_batch(
     pool: int = 50,
     rrf_k: int = 60,
     path: str = str(ICD10_PARQUET),
+    scorer=_SCORER,
 ) -> dict[str, list[dict]]:
     """Hybrid ICD-10-CM search: fuse FTS and fuzzy candidates via Reciprocal Rank Fusion.
 
@@ -241,12 +283,14 @@ def search_icd10_hybrid_batch(
         pool: How many candidates to pull from each underlying method before fusing.
         rrf_k: RRF rank-damping constant (60 is the standard default).
         path: Path to the ICD-10 code parquet.
+        scorer: rapidfuzz scorer passed through to the fuzzy half of the fuse
+            (see search_icd10_batch).
 
     Returns:
         Mapping of each input query to its list of match dicts (same shape as
         ``search_icd10_hybrid``).
     """
-    fuzzy_batch = search_icd10_batch(queries, limit=pool, score_cutoff=0, path=path)
+    fuzzy_batch = search_icd10_batch(queries, limit=pool, score_cutoff=0, path=path, scorer=scorer)
 
     results: dict[str, list[dict]] = {}
     for query in queries:

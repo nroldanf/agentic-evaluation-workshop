@@ -2,7 +2,7 @@
 
 Un agent minimalista de medical-scribe construido con LangGraph. Lee la
 transcripción (transcript) de una consulta médico–paciente, usa un modelo local
-de Ollama ([`gemma4:e2b`](https://ollama.com/library/gemma4) por defecto) para extraer una nota clínica estructurada
+de Ollama ([`qwen3.5:9b`](https://ollama.com/library/qwen3.5:9b) por defecto) para extraer una nota clínica estructurada
 y la guarda en `outputs/`. La historia de la enfermedad actual (HPI), los signos
 vitales (vitals), el examen físico (physical exam) y los diagnósticos se extraen
 mediante nodes (nodos) separados que pueden ejecutarse de forma secuencial (por
@@ -65,10 +65,10 @@ Necesitas dos herramientas instaladas localmente:
 - **[uv](https://docs.astral.sh/uv/)** — para gestionar el entorno y las dependencias de Python.
 
 1. Instala [Ollama](https://ollama.com) y descarga el modelo
-   [`gemma4:e2b`](https://ollama.com/library/gemma4):
+   [`qwen3.5:9b`](https://ollama.com/library/qwen3.5:9b):
 
    ```bash
-   ollama pull gemma4:e2b
+   ollama pull qwen3.5:9b
    ```
 
 2. Instala las dependencias con [uv](https://docs.astral.sh/uv/):
@@ -169,7 +169,7 @@ El comportamiento del agent se configura mediante variables de entorno.
 Defínelas en `.env` (ver `.env.example`) o de forma inline:
 
 - `OLLAMA_MODEL` — el modelo de Ollama a usar (por defecto
-  [`gemma4:e2b`](https://ollama.com/library/gemma4)).
+  [`qwen3.5:9b`](https://ollama.com/library/qwen3.5:9b)).
 - `OLLAMA_TEMPERATURE` — temperatura de sampling (por defecto `0.1`; más baja =
   más determinista).
 - `OLLAMA_TIMEOUT` — timeout por request al servidor de Ollama, en segundos (por

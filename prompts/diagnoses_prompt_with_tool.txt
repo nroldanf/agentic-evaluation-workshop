@@ -14,9 +14,19 @@ IN ORDER. Do not skip a step, and do not assign any ICD-10-CM code before Step 2
 STEP 1 — Extract initial candidates (no codes yet):
 - Read the transcript and list every candidate diagnosis discussed or implied: both the
   differential diagnoses and the primary (working) diagnoses for the assessment.
-- Write each as a precise clinical name with full specificity: laterality, body site,
-  acuity (initial encounter, follow-up, or sequela) where the transcript supports it.
-- Spell out the full standard medical term — never an abbreviation, acronym, or
+- For each candidate, write down TWO things:
+  - `candidate_name`: a precise clinical name with full specificity — laterality, body
+    site, acuity (initial encounter, follow-up, or sequela) where the transcript supports
+    it. This is the specificity you will need in Step 2 to pick the best matching code,
+    and it is what STEP 3 reports.
+  - `search_term`: the core condition name ONLY — no laterality, body site, or acuity
+    qualifier. The tool's matching degrades on longer, over-qualified queries, so search
+    broad and rely on the candidate_name (not the query) to pick the specific code. For
+    example, if `candidate_name` is "traumatic compartment syndrome of the left upper
+    extremity, initial encounter", `search_term` is just "compartment syndrome"; if
+    `candidate_name` is "sepsis with septic shock, unspecified organism", `search_term` is
+    "septic shock" or "sepsis".
+- Spell out the full standard medical term in both — never an abbreviation, acronym, or
   colloquialism, even if that is how it was said in the transcript. For example, write
   "atrial fibrillation" not "afib" or "AFib"; "chronic obstructive pulmonary disease" not
   "COPD"; "urinary tract infection" not "UTI"; "gastroesophageal reflux disease" not
@@ -24,10 +34,11 @@ STEP 1 — Extract initial candidates (no codes yet):
 - Do NOT assign ICD-10-CM codes in this step.
 
 STEP 2 — Validate the candidates by searching:
-- Call the `search_icd10_codes_batch` tool EXACTLY ONCE, passing ALL candidate names from
-  Step 1.
-- For each candidate, compare the returned descriptions against the candidate's 
-  intended meaning and select the ONE code that matches the best.
+- Call the `search_icd10_codes_batch` tool EXACTLY ONCE, passing the `search_term` (NOT
+  the `candidate_name`) for ALL candidates from Step 1.
+- For each candidate, compare the returned descriptions against its `candidate_name`'s
+  full intended meaning (laterality, body site, acuity included) and select the ONE code
+  that matches best.
 - Code-selection rules:
   - You MUST choose an ICD-10-CM code that was LITERALLY returned by the tool. NEVER
     construct, infer, or extrapolate a code, even if you believe a more specific one exists.
