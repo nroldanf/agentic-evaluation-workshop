@@ -596,9 +596,8 @@ def _(mo):
 
     Four independent sub-agents aren't yet an agent pipeline. `agent.py` wires
     them into a LangGraph `StateGraph`: a typed state (`ScribeState`) that each
-    node reads `transcript` from and writes one field to, run either
-    sequentially (one Ollama call at a time — reliable against a single local
-    server) or in parallel (needs `OLLAMA_NUM_PARALLEL >= 4`).
+    node reads `transcript` from and writes one field to, run sequentially
+    (one Ollama call at a time — reliable against a single local server).
 
     We reuse the exact sub-agents built above (`hpi_agent`, `vitals_agent`,
     `physical_exam_agent`, and the ICD-10 tool-enabled `diagnoses_agent` from
