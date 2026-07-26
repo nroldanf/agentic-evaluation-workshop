@@ -1,7 +1,14 @@
 {
   "patient_name": "Frodo Baggins",
   "encounter_id": "HOU-002",
-  "hpi": "Frodo Baggins presents awake and interactive several days after rescue from the slopes of Mount Doom, following the destruction of the One Ring. He reports significant thirst, greater than any he recalls previously, with improvement since oral fluids were started. Per Sam, oral intake of food has been minimal. He reports traumatic loss of the right ring finger, bitten off during the final confrontation over the Ring. He reports the prior left shoulder wound (see encounter RIV-001) is now fully resolved and has not required attention. He reports fragmented sleep, waking multiple times nightly, and describes a persistent sensation of carrying weight associated with the Ring despite its destruction, as well as an intermittent sensation of being watched, both present since before reaching the mountain and improving but not fully resolved. He minimizes these symptoms to his companion Sam, who reports ongoing concern regardless.",
+  "hpi": "Patient is an adult presenting several days after rescue from the slopes of Mount Doom, following the destruction of the One Ring. He reports significant thirst, greater than any he recalls previously, with improvement since oral fluids were started. Per Sam, oral intake of food has been minimal. He reports traumatic loss of the right ring finger, bitten off during the final confrontation over the Ring. He reports the prior left shoulder wound (see encounter RIV-001) is now fully resolved and has not required attention. He reports fragmented sleep, waking multiple times nightly, and describes a persistent sensation of carrying weight associated with the Ring despite its destruction, as well as an intermittent sensation of being watched, both present since before reaching the mountain and improving but not fully resolved. He minimizes these symptoms to his companion Sam, who reports ongoing concern regardless.",
+  "vitals": {
+    "temperature_c": 37.0,
+    "heart_rate_bpm": 78,
+    "respiratory_rate_bpm": null,
+    "blood_pressure": "100/68",
+    "spo2_percent": 97
+  },
   "physical_exam": [
     {
       "system": "heent",
@@ -27,21 +34,21 @@
   "differential_diagnoses": [
     {
       "icd10_code": "E44.0",
-      "diagnosis": "Moderate protein-calorie malnutrition"
+      "diagnosis_name": "Moderate protein-calorie malnutrition"
     }
   ],
   "assessment": [
     {
       "icd10_code": "S68.114A",
-      "diagnosis": "Traumatic amputation of right ring finger"
+      "diagnosis_name": "Traumatic amputation of right ring finger"
     },
     {
       "icd10_code": "E86.0",
-      "diagnosis": "Dehydration"
+      "diagnosis_name": "Dehydration"
     },
     {
       "icd10_code": "F43.0",
-      "diagnosis": "Acute stress reaction"
+      "diagnosis_name": "Acute stress reaction"
     }
   ],
   "expected_tool_calls": [
@@ -67,12 +74,5 @@
         "post-traumatic stress disorder"
       ]
     }
-  ],
-  "vitals": {
-    "temperature_c": 37.0,
-    "heart_rate_bpm": 78,
-    "respiratory_rate_bpm": null,
-    "blood_pressure": "100/68",
-    "spo2_percent": 97
-  }
+  ]
 }

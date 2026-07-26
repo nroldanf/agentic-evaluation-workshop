@@ -1,19 +1,29 @@
 """
 Diagnoses evaluation.
 
-Three separate questions, deliberately kept separate because each catches
-a different failure mode:
+Two functions, checking different things:
 
-1. Precision / Recall on ICD-10 codes (extracted vs. golden) — did the
+`eval_diagnoses(golden, extracted, icd10_catalog)` -- compares against a
+golden record. Two separate questions, deliberately kept separate because
+each catches a different failure mode:
+
+1. Precision / Recall on ICD-10 codes (extracted vs. golden) -- did the
    agent find the right diagnoses, and only the right ones?
 2. Are the codes it used real? (looked up in the ICD-10 catalog, not
    invented from memory)
 3. Does the diagnosis text actually correspond to what that code means?
    (an agent can use a *valid* code that just doesn't match its own text)
+
+`eval_diagnosis_list_limits(extracted)` -- no golden needed. Checks
+structural limits diagnoses_prompt.txt mandates directly (max 3 entries per
+list, assessment can't be empty).
+
+Functional style, no classes: both functions return a plain dict.
 """
 import csv
-from dataclasses import dataclass, field
 from typing import Callable, Optional
+import pandas as pd
+from anthropic import Anthropic
 
 
 def load_icd10_catalog(path: str) -> dict[str, str]:
@@ -26,13 +36,12 @@ def load_icd10_catalog(path: str) -> dict[str, str]:
 
 
 def load_icd10_catalog_parquet(
-    path: str, code_col: str = "code", description_col: str = "description"
+    path: str, code_col: str = "ICD10_Code", description_col: str = "Description"
 ) -> dict[str, str]:
     """Loads the catalog from a .parquet file instead of CSV -- e.g. the
-    Diagnosis.parquet in this repo's data/ folder. Adjust code_col /
+    ICD10_DB.parquet in this repo's data/ folder. Adjust code_col /
     description_col if your parquet uses different column names (check
     with `pandas.read_parquet(path).columns` first)."""
-    import pandas as pd
     df = pd.read_parquet(path)
     return dict(zip(df[code_col], df[description_col]))
 
@@ -51,23 +60,22 @@ def _codes(note: dict) -> set[str]:
     return {i["icd10_code"] for i in _all_diagnosis_items(note) if i["icd10_code"]}
 
 
-@dataclass
-class DiagnosesEvalResult:
-    precision: float
-    recall: float
-    false_positive_codes: set
-    false_negative_codes: set
-    invalid_codes: set                 # codes not found in the ICD-10 catalog at all
-    code_diagnosis_mismatches: list     # code is valid, but the diagnosis text doesn't match it
-    premature_diagnosis_violations: list  # golden says null (not yet diagnosable), extracted closed it anyway
-
-
 def eval_diagnoses(
     golden: dict,
     extracted: dict,
     icd10_catalog: dict[str, str],
     code_matches_diagnosis_judge: Optional[Callable[[str, str], bool]] = None,
-) -> DiagnosesEvalResult:
+) -> dict:
+    """Returns a plain dict:
+    {
+      "precision": float,
+      "recall": float,
+      "false_positive_codes": set,
+      "false_negative_codes": set,
+      "invalid_codes": set,               # codes not found in the ICD-10 catalog at all
+      "code_diagnosis_mismatches": list,   # code is valid, but the diagnosis text doesn't match it
+    }
+    """
     golden_codes = _codes(golden)
     extracted_codes = _codes(extracted)
 
@@ -94,38 +102,20 @@ def eval_diagnoses(
                     "official_description": official_description,
                 })
 
-    # Premature diagnosis check: golden differentials with icd10_code == null
-    # exist *specifically* to test whether the agent resists closing them.
-    premature = []
-    golden_null_diagnoses = {
-        d["diagnosis"] for d in golden.get("differential_diagnoses", []) if d.get("icd10_code") is None
+    return {
+        "precision": precision,
+        "recall": recall,
+        "false_positive_codes": false_positives,
+        "false_negative_codes": false_negatives,
+        "invalid_codes": invalid_codes,
+        "code_diagnosis_mismatches": mismatches,
     }
-    for item in _all_diagnosis_items(extracted):
-        # loose match by name since wording may vary slightly
-        for golden_name in golden_null_diagnoses:
-            if golden_name.lower() in item["diagnosis"].lower() and item["icd10_code"] is not None:
-                premature.append({
-                    "diagnosis": item["diagnosis"],
-                    "assigned_code": item["icd10_code"],
-                    "golden_expected": "null (insufficient criteria met, e.g. temporal)",
-                })
-
-    return DiagnosesEvalResult(
-        precision=precision,
-        recall=recall,
-        false_positive_codes=false_positives,
-        false_negative_codes=false_negatives,
-        invalid_codes=invalid_codes,
-        code_diagnosis_mismatches=mismatches,
-        premature_diagnosis_violations=premature,
-    )
 
 
 def code_matches_diagnosis_judge_claude(diagnosis_text: str, official_description: str,
                                          model: str = "claude-sonnet-4-6") -> bool:
     """Default LLM-as-judge implementation. Requires `anthropic` + API key.
     Pass a different callable into eval_diagnoses() for testing without API calls."""
-    from anthropic import Anthropic
     client = Anthropic()
 
     prompt = (
@@ -139,3 +129,38 @@ def code_matches_diagnosis_judge_claude(diagnosis_text: str, official_descriptio
         messages=[{"role": "user", "content": prompt}],
     )
     return "YES" in response.content[0].text.upper()
+
+
+# --- Structural limits (no golden needed, just the extraction itself) -------
+
+MAX_DIAGNOSES = 3
+
+
+def eval_diagnosis_list_limits(extracted: dict) -> dict:
+    """Checks structural limits that diagnoses_prompt.txt /
+    diagnoses_prompt_with_tool.txt mandate, independent of any golden
+    comparison:
+
+    - differential_diagnoses: at most 3 entries ("report only the 3 most relevant")
+    - assessment: at most 3 entries (same rule) AND at least 1 entry
+      ("Every encounter MUST have at least one primary diagnosis")
+
+    Returns a plain dict:
+    {
+      "assessment_count": int,
+      "differential_count": int,
+      "assessment_too_long": bool,    # more than 3 entries
+      "differential_too_long": bool,  # more than 3 entries
+      "assessment_empty": bool,       # zero entries -- violates "MUST have at least one"
+    }
+    """
+    assessment = extracted.get("assessment", [])
+    differentials = extracted.get("differential_diagnoses", [])
+
+    return {
+        "assessment_count": len(assessment),
+        "differential_count": len(differentials),
+        "assessment_too_long": len(assessment) > MAX_DIAGNOSES,
+        "differential_too_long": len(differentials) > MAX_DIAGNOSES,
+        "assessment_empty": len(assessment) == 0,
+    }
