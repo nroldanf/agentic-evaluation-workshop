@@ -1,0 +1,29 @@
+Read the patient-doctor transcript and extract every candidate diagnosis discussed or
+implied: both the differential diagnoses (possible conditions considered) and the primary
+or working diagnoses for the assessment. Be as thorough as possible — list every condition
+a clinician might reasonably consider, including less likely or ruled-out possibilities,
+not just the final answer. A later step assigns ICD-10-CM codes and picks the final few;
+do not narrow the list yourself here, and do NOT assign any codes in this step.
+
+For each candidate, produce:
+
+- `candidate_name`: a precise clinical name with full specificity — laterality, body site,
+  and acuity (initial encounter, follow-up, or sequela) where the transcript supports it.
+  Spell out the full standard medical term — never an abbreviation, acronym, or
+  colloquialism, even if that is how it was said in the transcript. For example, write
+  "atrial fibrillation" not "afib" or "AFib"; "chronic obstructive pulmonary disease" not
+  "COPD"; "urinary tract infection" not "UTI"; "gastroesophageal reflux disease" not
+  "GERD" or "acid reflux"; "myocardial infarction" not "MI" or "heart attack".
+
+- `search_term`: a short ICD-10-CM database query for this candidate:
+  - Core condition name only — no laterality, body site, or acuity qualifier. Longer,
+    over-qualified queries return poor matches; keep it broad and rely on
+    `candidate_name` (not this query) for the specific code.
+  - Exactly ONE body site or condition per query. If a candidate spans more than one body
+    site (e.g. burns to both the hand and the face), split it into separate candidates,
+    each with its own `candidate_name` and `search_term` for that single site.
+  - Prefer a short noun phrase over a prepositional one where they mean the same thing
+    (e.g. "hand burn" rather than "burn of the hand").
+
+- `section`: "differential" for a possible condition considered, "assessment" for a
+  primary/working diagnosis being actively treated.

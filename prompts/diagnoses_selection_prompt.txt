@@ -1,0 +1,51 @@
+You are given the original transcript and a list of candidate diagnoses extracted from it,
+each with a `candidate_name` (full clinical specificity) and the ICD-10-CM search results
+already retrieved for it (best match first). Assign the correct code to each candidate from
+these results, then consolidate into the final differential diagnoses and assessment.
+
+Do NOT rely on your own memory for ICD-10-CM codes — only use codes that appear in the
+provided search results for a candidate. The "score" field on each result is an internal
+ranking signal, not a confidence percentage, and isn't on a fixed scale; the results are
+already sorted best-first, so rely on that order, not the score value.
+
+Use the transcript to judge whether a candidate's search results are actually usable, not
+just to pick among them. A search can return only poor or unrelated matches (e.g. a
+completely different body system or an unrelated procedure/complication code) — when that
+happens, no amount of picking the "least bad" option makes it correct; omit the candidate
+instead. Re-read what the transcript actually says about that candidate before deciding a
+result is a genuine match.
+
+Code-selection rules, per candidate:
+- If NONE of that candidate's search results is a genuine match to what the transcript
+  describes, OMIT the candidate entirely rather than forcing the closest-sounding wrong code.
+- You MUST choose a code that appears LITERALLY among that candidate's results. NEVER
+  construct, infer, or extrapolate a code, even if you believe a more specific one exists.
+- The `diagnosis` you output MUST be the EXACT description string from the chosen result,
+  copied character-for-character — do NOT paraphrase, embellish, add a parenthetical, or
+  otherwise modify it, even if `candidate_name` is more specific. If a result's description
+  is "Acute bronchitis", output exactly "Acute bronchitis" — NOT "Acute bronchitis (viral)"
+  — even though that detail came from the candidate.
+- Prefer the most specific matching result (correct laterality, body site, and acuity)
+  when `candidate_name` and the transcript support that level of detail.
+- Do NOT blindly take the first/top result: if it's a different condition than intended,
+  choose a better one from that candidate's results.
+- Use the transcript, not just the candidate's given `section`, to decide whether it belongs
+  under differentials or assessment — re-derive it from the transcript if the two conflict.
+
+ICD-10 laterality conventions (use when selecting among a candidate's results):
+- Right = 1, Left = 2, Bilateral = 3, Unspecified = 0 or 9
+- Use "unspecified" only when `candidate_name` truly lacks laterality detail
+- Examples: right eye open-angle glaucoma → H40.021; pain in left foot → M79.672;
+  bilateral acute otitis media → H66.003
+
+Consolidate the validated candidates into the final output: merge duplicates, drop any
+candidate that failed validation above, and resolve overlaps between differentials and the
+assessment. Each ICD-10 code must appear in EXACTLY ONE of the two lists below, never both —
+if a candidate could fit either, put it in the one the transcript supports better and leave
+it out of the other entirely.
+- differential_diagnoses: the consolidated, validated differentials, sorted by likelihood
+  (most likely first), reporting ONLY the 3 most relevant. If fewer than 3 were discussed,
+  report only those. If no differential diagnoses were discussed, return an empty list.
+- assessment: the consolidated, validated primary/working diagnoses, sorted by likelihood
+  (most likely first), reporting ONLY the 3 most relevant. If fewer than 3 were discussed,
+  report only those. Every encounter MUST have at least one primary diagnosis.
