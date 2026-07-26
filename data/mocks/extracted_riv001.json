@@ -1,0 +1,25 @@
+{
+  "vitals": {
+    "temperature_c": 38.1,
+    "heart_rate_bpm": 130,
+    "respiratory_rate_bpm": null,
+    "blood_pressure": "100/65",
+    "spo2_percent": 900
+  },
+  "differential_diagnoses": [
+    {
+      "icd10_code": "A41.9",
+      "diagnosis": "Sepsis, unspecified organism"
+    },
+    {
+      "icd10_code": "XX99.99",
+      "diagnosis": "Fabricated non-existent code"
+    }
+  ],
+  "assessment": [
+    {
+      "icd10_code": "S41.032A",
+      "diagnosis": "Puncture wound of left shoulder with signs of progressive infection"
+    }
+  ]
+}

@@ -12,6 +12,7 @@ dependencies = [
     "langfuse>=4.13.0",
     "langgraph>=1.2.7",
     "marimo>=0.23.13",
+    "notebook>=7.6.1",
     "pandas>=3.0.3",
     "pyarrow>=24.0.0",
     "python-dotenv>=1.2.2",

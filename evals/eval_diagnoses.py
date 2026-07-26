@@ -23,8 +23,6 @@ Functional style, no classes: both functions return a plain dict.
 import csv
 from typing import Callable, Optional
 import pandas as pd
-from anthropic import Anthropic
-
 
 def load_icd10_catalog(path: str) -> dict[str, str]:
     """Loads a CSV with columns: code, description -> {code: description}"""
@@ -110,25 +108,6 @@ def eval_diagnoses(
         "invalid_codes": invalid_codes,
         "code_diagnosis_mismatches": mismatches,
     }
-
-
-def code_matches_diagnosis_judge_claude(diagnosis_text: str, official_description: str,
-                                         model: str = "claude-sonnet-4-6") -> bool:
-    """Default LLM-as-judge implementation. Requires `anthropic` + API key.
-    Pass a different callable into eval_diagnoses() for testing without API calls."""
-    client = Anthropic()
-
-    prompt = (
-        f'Official ICD-10 description: "{official_description}"\n'
-        f'Diagnosis text written by the agent: "{diagnosis_text}"\n\n'
-        "Does the diagnosis text correctly correspond to the official ICD-10 "
-        "description above? Answer with exactly one word: YES or NO."
-    )
-    response = client.messages.create(
-        model=model, max_tokens=10,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return "YES" in response.content[0].text.upper()
 
 
 # --- Structural limits (no golden needed, just the extraction itself) -------

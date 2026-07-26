@@ -1,0 +1,5 @@
+[
+  {"tool": "lookup_icd10", "args": {"query": "puncture wound shoulder"}},
+  {"tool": "lookup_icd10", "args": {"query": "unrelated headache"}},
+  {"tool": "get_patient_history", "args": {"patient_id": "RIV-001"}}
+]
