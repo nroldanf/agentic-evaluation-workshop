@@ -26,7 +26,7 @@ from typing import TypedDict
 from dotenv import load_dotenv
 import httpx
 from langchain.agents import create_agent
-from langchain.agents.middleware import ModelRetryMiddleware
+from langchain.agents.middleware import ModelRetryMiddleware, ModelCallLimitMiddleware
 from langchain.agents.structured_output import ProviderStrategy
 from langchain.tools import tool
 from langchain_core.runnables import RunnableConfig
@@ -134,7 +134,7 @@ def search_icd10_codes_batch(diagnosis_names: list[str], limit: int = 25) -> dic
 
 # The LLM: a local Ollama model. A low temperature keeps extraction near-deterministic.
 # Both the model name and temperature are configurable via env vars (see .env.example).
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma4:e2b")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:9b")
 OLLAMA_TEMPERATURE = float(os.getenv("OLLAMA_TEMPERATURE", "0.1"))
 # Per-request timeout in seconds for calls to the Ollama server. Small local
 # models can be slow, so this defaults high; raise it further via env var if a
@@ -190,10 +190,38 @@ tool_model_no_reasoning = ChatOllama(
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "5"))
 logger.info("Model call retries: %d", LLM_MAX_RETRIES)
 
+# Hard ceiling on model calls per node, independent of LLM_MAX_RETRIES: when a
+# tool-based structured-output agent replies without ever calling the hidden
+# structuring tool (seen with the HPI agent, whose single free-text narrative
+# field invites a prose answer instead of a tool call), create_agent's own loop
+# just keeps re-invoking the model. That isn't an exception, so
+# ModelRetryMiddleware never sees it and the loop can run for minutes. This
+# caps it and fails fast instead.
+MODEL_CALL_LIMIT = int(os.getenv("MODEL_CALL_LIMIT", "8"))
 
-def get_middleware() -> list:
-    """Shared middleware for every agent: retry failed model calls with backoff."""
-    return [ModelRetryMiddleware(max_retries=LLM_MAX_RETRIES)]
+# A higher ceiling for the diagnoses agent when the ICD-10 tool is enabled: it
+# genuinely needs more turns than the other nodes. Observed in Langfuse traces:
+# the small model re-queries search_icd10_codes_batch repeatedly with
+# progressively reworded diagnosis names (e.g. "necrotizing fasciitis of
+# shoulder", then "necrotizing fasciitis", then "infectious necrotizing
+# fasciitis of shoulder") instead of settling after one batched call, so 8+
+# tool round trips before a final answer is normal, not a sign it's stuck.
+DIAGNOSES_MODEL_CALL_LIMIT = int(os.getenv("DIAGNOSES_MODEL_CALL_LIMIT", "20"))
+
+
+def get_middleware(call_limit: int = MODEL_CALL_LIMIT) -> list:
+    """Shared middleware for every agent: retry failed model calls with backoff,
+    and hard-cap total model calls so a stuck agent fails fast instead of
+    looping for minutes.
+
+    `call_limit` is overridable per agent: the tool-calling diagnoses agent
+    needs a much higher ceiling than the single-shot extraction agents (see
+    DIAGNOSES_MODEL_CALL_LIMIT).
+    """
+    return [
+        ModelRetryMiddleware(max_retries=LLM_MAX_RETRIES),
+        ModelCallLimitMiddleware(run_limit=call_limit, exit_behavior="error"),
+    ]
 
 logger.info("Loading system prompt from %s", SYSTEM_PROMPT_PATH)
 system_prompt = SYSTEM_PROMPT_PATH.read_text(encoding="utf-8").strip()
@@ -286,26 +314,42 @@ class ScribeState(TypedDict):
     diagnoses: DiagnosesOutput
 
 
-def build_agent(llm, prompt: str, response_format, tools: list | None = None):
+def build_agent(
+    llm,
+    prompt: str,
+    response_format,
+    tools: list | None = None,
+    call_limit: int = MODEL_CALL_LIMIT,
+):
     """Build a scribe sub-agent from its task prompt and output schema.
 
     Every sub-agent shares the same model, scribe system role, and retry
-    middleware; they differ only in their task `prompt`, `response_format`, and
-    optional `tools`. This single builder keeps them consistent and makes adding a
-    new agent a one-line call.
+    middleware; they differ only in their task `prompt`, `response_format`,
+    optional `tools`, and (for diagnoses-with-tool) `call_limit`. This single
+    builder keeps them consistent and makes adding a new agent a one-line call.
 
     Args:
         prompt: Task instructions for this agent, appended to the shared scribe
             system role to form the agent's system prompt.
         response_format: The structured-output target. Pass a bare Pydantic model
-            to use the default tool-based strategy (reliable for tool-free agents),
-            or wrap it in `ProviderStrategy(schema=...)` to use Ollama's native
-            JSON-schema `format` (grammar-constrained generation). Native output is
-            preferred for the diagnoses agent: with tools, the default strategy makes
-            structured output a hidden tool that competes with the domain tool and
-            the small model tends to answer in prose (dropping the result); without
-            tools, it lets the model emit slow free-form reasoning before the JSON.
+            to use the default tool-based strategy, or wrap it in
+            `ProviderStrategy(schema=...)` to use Ollama's native JSON-schema
+            `format` (grammar-constrained generation). The default strategy is fine
+            for schemas that read as "extraction" (vitals, physical exam), but a
+            schema whose field is really free-text prose (HPI's narrative) invites
+            the model to just answer in plain content instead of calling the hidden
+            structuring tool, which starves it of a tool call and can loop for
+            minutes (see hpi_node) — use `ProviderStrategy` there instead. Native
+            output is also preferred for the diagnoses agent: with tools, the
+            default strategy makes structured output a hidden tool that competes
+            with the domain tool and the small model tends to answer in prose
+            (dropping the result); without tools, it lets the model emit slow
+            free-form reasoning before the JSON.
         tools: Domain tools to expose, or None for a tool-free agent.
+        call_limit: Passed to ModelCallLimitMiddleware (see get_middleware).
+            Defaults to MODEL_CALL_LIMIT; the diagnoses node passes
+            DIAGNOSES_MODEL_CALL_LIMIT instead when the ICD-10 tool is enabled,
+            since that workflow legitimately needs more model calls.
 
     Returns:
         A compiled agent whose `invoke` returns the validated instance at
@@ -316,7 +360,7 @@ def build_agent(llm, prompt: str, response_format, tools: list | None = None):
         system_prompt=f"{system_prompt}\n\n{prompt}",
         tools=tools or [],
         response_format=response_format,
-        middleware=get_middleware(),
+        middleware=get_middleware(call_limit=call_limit),
     )
 
 
@@ -349,9 +393,18 @@ async def vitals_node(state: ScribeState, config: RunnableConfig) -> dict:
 
 
 async def hpi_node(state: ScribeState, config: RunnableConfig) -> dict:
-    """Write the History of Present Illness with a dedicated, tool-free agent."""
+    """Write the History of Present Illness with a dedicated, tool-free agent.
+
+    Uses `ProviderStrategy` (native JSON-schema output) rather than the default
+    tool-based strategy: the HPI schema is a single free-text narrative field, and
+    a bare Pydantic `response_format` asks the model to hand that narrative back
+    via a hidden structuring tool call. The model tends to just answer in prose
+    instead of calling it, so create_agent's loop keeps re-invoking the model
+    hoping for a tool call — see ModelCallLimitMiddleware in get_middleware for
+    the resulting failure mode. Native output sidesteps the tool call entirely.
+    """
     logger.info("HPI node: writing history of present illness (tool-free)")
-    agent = build_agent(extraction_model, hpi_prompt, HistoryOfPresentIllness)
+    agent = build_agent(extraction_model, hpi_prompt, ProviderStrategy(schema=HistoryOfPresentIllness))
     return {"hpi": await run_agent(agent, state["transcript"], config)}
 
 
@@ -367,6 +420,11 @@ async def diagnoses_node(state: ScribeState, config: RunnableConfig) -> dict:
 
     Uses `ProviderStrategy` (native JSON-schema output) rather than the default
     tool-based strategy so the structured result survives alongside the ICD-10 tool.
+
+    With the tool enabled, uses DIAGNOSES_MODEL_CALL_LIMIT instead of the
+    default MODEL_CALL_LIMIT: the small model iteratively re-queries the ICD-10
+    tool with reworded diagnosis names rather than converging in one or two
+    calls, so it legitimately needs more turns than the other nodes.
     """
     use_tool = state["use_tool"]
     logger.info(
@@ -378,6 +436,7 @@ async def diagnoses_node(state: ScribeState, config: RunnableConfig) -> dict:
         tool_model if use_tool else tool_model_no_reasoning,
         state["diagnoses_prompt"],
         ProviderStrategy(schema=DiagnosesOutput),
+        call_limit=DIAGNOSES_MODEL_CALL_LIMIT if use_tool else MODEL_CALL_LIMIT,
         tools=tools,
     )
     return {"diagnoses": await run_agent(agent, state["transcript"], config)}
