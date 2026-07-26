@@ -1,35 +1,26 @@
-# Agents Evaluation Workshop
+# The Fellowship of Agentic Evaluations: How to evaluate an agent? 🧙
 
-Un agent minimalista de medical-scribe construido con LangGraph. Lee la
-transcripción (transcript) de una consulta médico–paciente, usa un modelo local
-de Ollama ([`qwen3.5:9b`](https://ollama.com/library/qwen3.5:9b) por defecto) para extraer una nota clínica estructurada
-y la guarda en `outputs/`. La historia de la enfermedad actual (HPI), los signos
-vitales (vitals), el examen físico (physical exam) y los diagnósticos se extraen
-mediante nodes (nodos) separados, ejecutados de forma secuencial.
+![The Fellowship of Agentic Evaluations](imgs/tlor.png)
 
-Este repo es el material de un workshop: además del agent (`agent.py`) y sus
-evals (`evals/`), incluye dos notebooks de [marimo](https://marimo.io) que
-reconstruyen ambas piezas paso a paso — ver [Paso a paso del Workshop](#paso-a-paso-del-workshop).
+Un workshop práctico para PyCon Colombia: construye, de punta a punta, un
+**agent local de medical-scribe** — extracción con LangGraph, validación de
+diagnósticos, tracing y LLM-as-a-Judge — ambientado en casos del universo de
+El Señor de los Anillos.
+
+**100% local, sin llamadas obligatorias a la nube y sin tarjeta de crédito.**
+
+El agent lee la transcripción (transcript) de una consulta médico–paciente, usa un modelo local de Ollama ([`qwen3.5:9b`](https://ollama.com/library/qwen3.5:9b) por defecto) para extraer una nota clínica estructurada y la guarda en `outputs/`. La historia de la enfermedad actual (HPI), los signos vitales (vitals), el examen físico (physical exam) y los diagnósticos se extraen mediante nodes (nodos) separados, ejecutados de forma secuencial.
+
+Este repo es el material de un workshop: además del agent (`agent.py`) y sus evals (`evals/`), incluye dos notebooks de [marimo](https://marimo.io) que reconstruyen ambas piezas paso a paso — ver [Paso a paso del Workshop](#paso-a-paso-del-workshop).
 
 ## Arquitectura
 
-Cuatro nodes extraen la nota, cada uno con su propio prompt y schema de salida,
-todos construidos con una única función `build_agent(prompt, response_format,
-tools)`:
+Cuantro diferentes agentes extraen parte de la nota clínica, cada uno con su propio prompt y esquema de salida, todos construidos con una única función `build_agent`:
 
-- **hpi node** (`HistoryOfPresentIllness`) — redacta la historia de la enfermedad
-  actual como un párrafo narrativo cronológico. Sin tools.
-- **vitals node** (`VitalSigns`) — extrae los signos vitales. Sin tools.
-- **physical exam node** (`PhysicalExam`) — documenta los hallazgos **objetivos**
-  del examen físico (lo observado/medido por el clínico, no los síntomas referidos
-  por el paciente), agrupados por sistema corporal. El sistema se restringe a un
-  enum fijo (`PhysicalExamSystem`: general, heent, neck, cardiovascular,
-  respiratory, …). Sin tools.
-- **diagnoses node** (`DiagnosesOutput`) — extrae los diagnósticos diferenciales
-  (los 3 más relevantes) y el assessment. Con `--use-tool` valida los códigos
-  contra el tool de búsqueda de ICD-10, mediante un agent con tool-calling (por
-  defecto) o, con `--deterministic`, mediante un pipeline de tres pasos con
-  búsqueda determinística (ver más abajo).
+- **hpi node** (`HistoryOfPresentIllness`): redacta la historia de la enfermedad actual como un párrafo narrativo cronológico. Sin usar `herramientas`.
+- **vitals node** (`VitalSigns`): extrae los signos vitales, concretamente temperatura, presión arterial, frecuencia cardíaca y frecuencia respiratoria. Sin usar `herramientas`.
+- **physical exam node** (`PhysicalExam`): documenta los hallazgos **objetivos** del examen físico (lo observado/medido por el clínico, no los síntomas referidos por el paciente), agrupados por sistema corporal. El sistema se restringe a un enum fijo (`PhysicalExamSystem`: general, heent, neck, cardiovascular, respiratory, …). Sin tools.
+- **diagnoses node** (`DiagnosesOutput`): extrae los diagnósticos diferenciales (los 3 más relevantes) y una lista de diagnosticos finales en `assessment`. Cuenta con dos versiones: una sin herramientas, que solo extrae los diagnósticos sin verificar los códigos ICD-10, y otra con herramientas (--use-tool), que valida los códigos contra un catálogo de ICD-10-CM en memoria. La versión con herramientas puede ejecutarse de dos formas: con tool-calling (por defecto) o, con `--deterministic`, mediante un pipeline fijo de tres pasos (ver más abajo).
 
 Sus salidas se combinan en un único `ClinicalNote`.
 
