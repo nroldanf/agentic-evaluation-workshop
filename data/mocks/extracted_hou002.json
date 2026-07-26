@@ -1,0 +1,25 @@
+{
+  "vitals": {
+    "temperature_c": 37.0,
+    "heart_rate_bpm": 78,
+    "respiratory_rate_bpm": 18,
+    "blood_pressure": "100/68",
+    "spo2_percent": 90
+  },
+  "differential_diagnoses": [
+    {
+      "icd10_code": "E44.0",
+      "diagnosis": "Moderate protein-calorie malnutrition"
+    }
+  ],
+  "assessment": [
+    {
+      "icd10_code": "S68.114A",
+      "diagnosis": "Traumatic amputation of right ring finger"
+    },
+    {
+      "icd10_code": "E86.0",
+      "diagnosis": "Dehydration"
+    }
+  ]
+}
