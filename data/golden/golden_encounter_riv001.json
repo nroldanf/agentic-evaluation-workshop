@@ -49,7 +49,7 @@
   ],
   "expected_tool_calls": [
     {
-      "tool": "lookup_icd10",
+      "tool": "search_icd10_codes_batch",
       "expected_call_count": 3,
       "expected_query_contains": [
         "puncture",
