@@ -11,7 +11,7 @@ El Señor de los Anillos.
 
 El agent lee la transcripción (transcript) de una consulta médico–paciente, usa un modelo local de Ollama ([`qwen3.5:9b`](https://ollama.com/library/qwen3.5:9b) por defecto) para extraer una nota clínica estructurada y la guarda en `outputs/`. La historia de la enfermedad actual (HPI), los signos vitales (vitals), el examen físico (physical exam) y los diagnósticos se extraen mediante nodes (nodos) separados, ejecutados de forma secuencial.
 
-Este repo es el material de un workshop: además del agent (`agent.py`) y sus evals (`evals/`), incluye dos Jupyter notebooks que reconstruyen ambas piezas paso a paso — ver [Paso a paso del Workshop](#paso-a-paso-del-workshop).
+Este repo es el material de un workshop: además del agent (`agent.py`) y sus evals (`evals/`), incluye tres Jupyter notebooks que reconstruyen ambas piezas paso a paso — ver [Paso a paso del Workshop](#paso-a-paso-del-workshop).
 
 ## Tabla de contenidos
 
@@ -26,7 +26,8 @@ Este repo es el material de un workshop: además del agent (`agent.py`) y sus ev
 - [Instrucciones de instalación](#instrucciones-de-instalación)
 - [Paso a paso del Workshop](#paso-a-paso-del-workshop)
   - [Notebook 1 — Building an agent (`notebooks/1_building_an_agent.ipynb`)](#notebook-1--building-an-agent-notebooks1_building_an_agentipynb)
-  - [Notebook 2 — LLM as a judge (`notebooks/2_llm_as_judge_eval.ipynb`)](#notebook-2--llm-as-a-judge-notebooks2_llm_as_judge_evalipynb)
+  - [Notebook 2 — Code-based evals (`notebooks/2_code_based_eval.ipynb`)](#notebook-2--code-based-evals-notebooks2_code_based_evalipynb)
+  - [Notebook 3 — LLM as a judge (`notebooks/3_llm_as_judge_eval.ipynb`)](#notebook-3--llm-as-a-judge-notebooks3_llm_as_judge_evalipynb)
 - [Ejecutar el agente](#ejecutar-el-agente)
   - [Validación de códigos ICD-10](#validación-de-códigos-icd-10)
   - [Ejecutar solo algunos nodes](#ejecutar-solo-algunos-nodes)
@@ -130,8 +131,10 @@ tool calls esperados) que un profesional de salud revisó y dejó fijados en
 `data/golden/golden_encounter_*.json` / `golden_case_bilbo_trivial.json`.
 
 - `eval_diagnoses()` (`evals/eval_diagnoses.py`) — precision/recall de los
-  códigos ICD-10 extraídos contra los del golden, y si el texto del
-  diagnóstico corresponde de verdad a ese código.
+  códigos ICD-10 extraídos contra los del golden. Opcionalmente, si le pasas
+  un callable `code_matches_diagnosis_judge` (p. ej. un LLM-as-judge propio),
+  también valida si el texto del diagnóstico corresponde de verdad a ese
+  código; sin ese callable, ese chequeo queda vacío.
 - `eval_vitals()` (`evals/eval_vitals.py`) — presencia (precision/recall) y
   exactitud numérica de los cinco signos vitales contra el golden.
 - `pe_precision_recall_evaluator` (`evals/eval_clinical_note_dataset.py`) —
@@ -150,6 +153,11 @@ golden espera ausente) y llamadas a herramientas que no debieron ocurrir —
 usando el caso de Bilbo (`golden_case_bilbo_trivial.json`), diseñado
 específicamente para probar el uso eficiente de la herramienta de ICD-10.
 
+Estas tres capas —code-based, golden dataset y trajectory— se recorren en
+vivo, con ejercicios para completar por tu cuenta, en
+`notebooks/2_code_based_eval.ipynb` — ver
+[Paso a paso del Workshop](#paso-a-paso-del-workshop).
+
 #### LLM as a judge eval
 
 Para el HPI y el physical exam — texto libre, sin una única versión
@@ -159,8 +167,8 @@ que un profesional de salud espera de una nota médica (Accuracy,
 Completeness, Tone — ver `prompts/hpi_judge_prompt.txt` /
 `prompts/physical_exam_judge_prompt.txt`). `evals/eval_hpi_judge.py` y
 `evals/eval_clinical_note_dataset.py` lo corren contra Amazon Bedrock (con
-fallback a Ollama local) y adjuntan los scores a Langfuse. El notebook 2
-(`notebooks/2_llm_as_judge_eval.ipynb`) lo muestra corriendo en vivo, celda por
+fallback a Ollama local) y adjuntan los scores a Langfuse. El notebook 3
+(`notebooks/3_llm_as_judge_eval.ipynb`) lo muestra corriendo en vivo, celda por
 celda — ver [Paso a paso del Workshop](#paso-a-paso-del-workshop).
 
 Solo el judge y `pe_precision`/`pe_recall` (el golden dataset eval del
@@ -236,7 +244,7 @@ flowchart LR
 
 ## Prerequisitos
 
-Para correr el workshop completo (agent + Langfuse local + los dos notebooks) se necesitan:
+Para correr el workshop completo (agent + Langfuse local + los tres notebooks) se necesitan:
 
 - **Docker**, con soporte para Compose v2 (el comando `docker compose`, con
   espacio, no el viejo `docker-compose`) — ya sea [Docker Desktop](https://www.docker.com/products/docker-desktop/)
@@ -288,7 +296,7 @@ Para correr el workshop completo (agent + Langfuse local + los dos notebooks) se
    ollama pull mistral:latest    # judge de fallback, si Bedrock no está disponible
    ```
 
-Con eso ya puedes correr el agent (`uv run python agent.py --help`) y los dos
+Con eso ya puedes correr el agent (`uv run python agent.py --help`) y los tres
 notebooks del workshop.
 
 ## Paso a paso del Workshop
@@ -298,7 +306,8 @@ Jupyter o con la extensión de Jupyter de VS Code / PyCharm:
 
 ```bash
 uv run --with jupyter jupyter lab notebooks/1_building_an_agent.ipynb
-uv run --with jupyter jupyter lab notebooks/2_llm_as_judge_eval.ipynb
+uv run --with jupyter jupyter lab notebooks/2_code_based_eval.ipynb
+uv run --with jupyter jupyter lab notebooks/3_llm_as_judge_eval.ipynb
 ```
 
 (el kernel de Jupyter arranca con el directorio del propio notebook
@@ -331,7 +340,34 @@ precalculados. Cubre, en orden:
 5. **Componer los nodes en un grafo** — cómo `agent.py` conecta los cuatro
    nodes en un `StateGraph` de LangGraph y ensambla el `ClinicalNote` final.
 
-### Notebook 2 — LLM as a judge (`notebooks/2_llm_as_judge_eval.ipynb`)
+### Notebook 2 — Code-based evals (`notebooks/2_code_based_eval.ipynb`)
+
+Notebook de ejercicios (en inglés), con celdas para completar por tu cuenta
+antes de revisar la solución con la función real de `evals/`. Recorre las tres
+capas deterministas contra el caso `RIV-001` (golden real +
+`data/mocks/extracted_riv001.json`/`tool_trace_riv001.json`, fixtures
+deliberadamente imperfectas):
+
+1. **Diagnósticos: precision/recall de códigos ICD-10** — calculas a mano
+   verdaderos/falsos positivos y negativos sobre el set de códigos, y lo
+   contrastas contra `eval_diagnoses()` (que además detecta códigos
+   inventados que no existen en el catálogo de `ICD10_DB.parquet`).
+2. **Vitals: precision/recall de presencia** — un ejercicio con TODOs para
+   completar la función por tu cuenta, verificado contra `eval_vitals()`; también
+   cubre `value_mismatches` (valores presentes en ambos lados pero
+   numéricamente muy distintos) y `fabricated_fields` (el caso más peligroso:
+   un valor inventado donde el golden dice que no es conocible).
+3. **Vitals: rangos fisiológicamente plausibles** — implementas el chequeo de
+   `eval_vitals_plausibility()` a mano, sin ningún golden de por medio.
+4. **Trajectory eval** — el mismo patrón de TP/FP aplicado a tool calls en
+   vez de códigos o campos, usando `eval_trajectory()` contra un
+   `tool_trace_*.json` mock.
+5. **Más allá de los mocks** — cómo reemplazar las fixtures hardcodeadas por
+   datos reales: busca la traza más reciente en Langfuse (reutilizando
+   `latest_trace_id` de `evals/eval_hpi_judge.py`) y arma el mismo
+   `extracted`/`tool_trace` a partir de las observations reales del grafo.
+
+### Notebook 3 — LLM as a judge (`notebooks/3_llm_as_judge_eval.ipynb`)
 
 Toma el HPI y el physical exam generados por el notebook 1 y pregunta si son
 *buenos* — la parte que un diff determinista no puede responder, porque
@@ -489,8 +525,8 @@ sin tocar el código:
 | `prompts/diagnoses_prompt_with_tool.txt` | diagnoses node (`--use-tool`, sin `--deterministic`) | Guía al agent con tool-calling a través del tool de ICD-10. |
 | `prompts/diagnoses_candidates_prompt.txt` | `extract_candidates` (`--use-tool --deterministic`) | Lista los diagnósticos candidatos y su `search_term`, sin asignar códigos. |
 | `prompts/diagnoses_selection_prompt.txt` | `select_diagnoses` (`--use-tool --deterministic`) | Elige el código de cada candidato a partir de los resultados ya buscados, y consolida el resultado final. |
-| `prompts/hpi_judge_prompt.txt` | judge de HPI (`evals/eval_hpi_judge.py`, notebook 2) | Rúbrica de Accuracy/Completeness/Tone (0-4) para el HPI generado. |
-| `prompts/physical_exam_judge_prompt.txt` | judge de physical exam (`evals/eval_clinical_note_dataset.py`, notebook 2) | Rúbrica de Accuracy/Completeness/Tone (0-4) para los hallazgos del physical exam. |
+| `prompts/hpi_judge_prompt.txt` | judge de HPI (`evals/eval_hpi_judge.py`, notebook 3) | Rúbrica de Accuracy/Completeness/Tone (0-4) para el HPI generado. |
+| `prompts/physical_exam_judge_prompt.txt` | judge de physical exam (`evals/eval_clinical_note_dataset.py`, notebook 3) | Rúbrica de Accuracy/Completeness/Tone (0-4) para los hallazgos del physical exam. |
 
 ## Tracing (opcional)
 
@@ -571,10 +607,12 @@ raíz del repo, no desde adentro de `evals/`, para que sus paths relativos a
 - `evals/eval_hpi_judge.py` / `evals/eval_clinical_note_dataset.py` — LLM-as-a-Judge,
   requieren Langfuse + un juez (Bedrock u Ollama). Comparten la selección de
   modelo juez vía `evals/judge_client.py` (no se corre directamente). El
-  notebook 2 (`notebooks/2_llm_as_judge_eval.ipynb`) muestra esta misma lógica
+  notebook 3 (`notebooks/3_llm_as_judge_eval.ipynb`) muestra esta misma lógica
   corriendo en vivo, celda por celda — ver [Paso a paso del Workshop](#paso-a-paso-del-workshop).
 - `evals/eval_diagnoses.py` / `evals/eval_vitals.py` / `evals/eval_trajectory.py` —
-  funciones puras, sin Langfuse ni LLM.
+  funciones puras, sin Langfuse ni LLM. El notebook
+  `notebooks/2_code_based_eval.ipynb` las recorre en vivo, con ejercicios para
+  completar por tu cuenta.
 
 ### HPI LLM-as-a-Judge
 
@@ -651,9 +689,11 @@ una nota clínica extraída (p. ej. `outputs/encounter_riv001.json`, generado po
 `agent.py`) contra su golden correspondiente por `encounter_id`
 (`data/golden/golden_encounter_riv001.json`), o una traza de tool calls contra
 `golden_case_bilbo_trivial.json` (`expected_tool_calls`).
-Por ahora no tienen CLI propia: se importan y se llaman desde tu propio
-script, REPL o notebook (`evals/run_evals.py` es un stub vacío, pensado como
-futuro punto de entrada para correr los tres a la vez).
+Por ahora no tienen CLI propia: `evals/` es un paquete Python
+(`evals/__init__.py`), así que se importan como `evals.eval_diagnoses`, etc.
+— justo lo que hace `notebooks/2_code_based_eval.ipynb` (`evals/run_evals.py`
+es un stub vacío, pensado como futuro punto de entrada para correr los tres
+a la vez desde la CLI).
 
 ## Autores
 
