@@ -14,25 +14,26 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # Building a Medical-Scribe Agent
+    # Construyendo un Agente Scribe Médico
 
-    Notebook 1 of the workshop series. We reconstruct the scribe agent
-    from `agent.py` and `models.py` piece by piece, running each piece
-    **live** against one real transcript — no pre-computed outputs.
-    *Evaluating* what it produces is notebook 2's job; here we only care
-    about how the agent is built.
+    Notebook 1 de la serie del taller. Reconstruimos el agente scribe a partir
+    de `agent.py` y `models.py` pieza por pieza, ejecutando cada pieza **en
+    vivo** contra una transcripción real — sin resultados precalculados.
+    *Evaluar* lo que produce es tarea del notebook 2; acá solo nos importa
+    cómo está construido el agente.
 
-    We deliberately don't `import agent`: it reads its prompts relative
-    to the repo root (which breaks once this notebook's cwd is
-    `notebooks/`) and it pings the Ollama server the moment it's
-    imported, to validate the model. Instead we rebuild the same pieces
-    here, one at a time — that reconstruction *is* the lesson.
+    Deliberadamente no hacemos `import agent`: ese módulo lee sus prompts de
+    forma relativa a la raíz del repo (lo cual se rompe en cuanto el cwd de
+    este notebook es `notebooks/`) y hace ping al servidor de Ollama apenas se
+    importa, para validar el modelo. En su lugar, reconstruimos acá las mismas
+    piezas, una por una — esa reconstrucción *es* la lección.
     """)
     return
 
 
 @app.cell
 def _():
+    import json
     import os
     import sys
     from pathlib import Path
@@ -44,7 +45,7 @@ def _():
         sys.path.insert(0, str(repo_root))
 
     load_dotenv(repo_root / ".env")
-    return os, repo_root
+    return json, os, repo_root
 
 
 @app.cell
@@ -55,7 +56,6 @@ def _():
     from langchain.agents import create_agent
     from langchain.agents.middleware import ModelCallLimitMiddleware, ModelRetryMiddleware
     from langchain.agents.structured_output import ProviderStrategy
-    from langchain.tools import tool
     from langchain_ollama import ChatOllama
     from langgraph.graph import END, START, StateGraph
 
@@ -70,7 +70,6 @@ def _():
         TypedDict,
         create_agent,
         httpx,
-        tool,
     )
 
 
@@ -85,13 +84,13 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Part 1 — The schema is the contract
+    ## Parte 1 — El esquema es el contrato
 
-    Everything the agent produces is shaped by the Pydantic models in
-    `models.py`, not by prompt wording alone. `create_agent(response_format=...)`
-    uses a model's fields — names, types, and descriptions — to constrain what
-    the LLM is allowed to return. So before touching a prompt, look at the
-    schema it has to fill in.
+    Todo lo que produce el agente está moldeado por los modelos de Pydantic en
+    `models.py`, no solo por la redacción del prompt. `create_agent(response_format=...)`
+    usa los campos de un modelo — nombres, tipos y descripciones — para
+    restringir lo que el LLM puede devolver. Así que antes de tocar un prompt,
+    hay que mirar el esquema que tiene que completar.
     """)
     return
 
@@ -103,10 +102,10 @@ def _(mo, models):
             "VitalSigns": mo.json(models.VitalSigns.model_json_schema()),
             "HistoryOfPresentIllness": mo.json(models.HistoryOfPresentIllness.model_json_schema()),
             "PhysicalExam": mo.json(models.PhysicalExam.model_json_schema()),
-            "DiagnosesOutput (differentials + assessment)": mo.json(
+            "DiagnosesOutput (diferenciales + valoración)": mo.json(
                 models.DiagnosesOutput.model_json_schema()
             ),
-            "ClinicalNote (the final merged output)": mo.json(models.ClinicalNote.model_json_schema()),
+            "ClinicalNote (la salida final combinada)": mo.json(models.ClinicalNote.model_json_schema()),
         }
     )
     return
@@ -115,12 +114,14 @@ def _(mo, models):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    A design choice worth pausing on: `assessment` is `list[Assessment]`, not a
-    single `Assessment` — the same shape as `differential_diagnoses`. A clinician
-    can be actively working up more than one condition at once, so the primary
-    diagnoses get the same "sorted by likelihood, top 3" treatment as the
-    differentials, just extracted for a different purpose (working diagnosis vs.
-    possibility considered). `Diagnosis` is the shared base model for both.
+    Una decisión de diseño que vale la pena mirar con detenimiento:
+    `assessment` es `list[Assessment]`, no un único `Assessment` — la misma
+    forma que `differential_diagnoses`. Un clínico puede estar evaluando
+    activamente más de una condición a la vez, así que los diagnósticos
+    primarios reciben el mismo tratamiento de "ordenados por probabilidad, top
+    3" que los diferenciales, solo que extraídos con un propósito distinto
+    (diagnóstico de trabajo vs. posibilidad considerada). `Diagnosis` es el
+    modelo base compartido por ambos.
     """)
     return
 
@@ -128,10 +129,11 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Part 2 — The transcript
+    ## Parte 2 — La transcripción
 
-    Everything below runs against one real patient-doctor transcript:
-    encounter `RIV-001`, Frodo Baggins examined by Elrond.
+    Todo lo que sigue corre contra una transcripción real de un encuentro
+    paciente-doctor: el encuentro `RIV-001`, Frodo Baggins examinado por
+    Elrond.
     """)
     return
 
@@ -152,26 +154,28 @@ def _(mo, transcript):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Part 3 — One sub-agent, end to end (HPI)
+    ## Parte 3 — Un subagente, de punta a punta (HPI)
 
     `create_agent(model=..., system_prompt=..., tools=..., response_format=...)`
-    is the whole recipe: a chat model, a system prompt (a shared scribe role +
-    one task's instructions), optional tools, and the Pydantic schema to
-    constrain the output. `result["structured_response"]` holds the validated
-    instance.
+    es toda la receta: un chat model, un system prompt (un rol scribe
+    compartido + las instrucciones de una tarea), herramientas opcionales, y
+    el esquema de Pydantic que restringe la salida. `result["structured_response"]`
+    contiene la instancia ya validada.
 
-    We start with the History of Present Illness (HPI) node: tool-free, one
-    prompt, one schema — the simplest of the four.
+    Empezamos con el nodo de Historia de la Enfermedad Actual (HPI): sin
+    herramientas, un prompt, un esquema — el más simple de los cuatro.
 
-    One wrinkle: HPI's schema is a single free-text narrative field (see the
-    schema above). With the default (tool-based) structured-output strategy,
-    the model is supposed to hand that narrative back via a hidden structuring
-    tool call — but a plain narrative reads like a normal chat answer, so the
-    model tends to just write it as prose instead of calling the tool. Nothing
-    then tells the graph the turn is "done," so it keeps re-invoking the model.
-    So, like the diagnoses node in Part 5, HPI uses `ProviderStrategy(schema=...)`
-    — Ollama's native JSON-schema `format` — instead, sidestepping the tool
-    call entirely.
+    Un detalle: el esquema del HPI es un único campo narrativo de texto libre
+    (ver el esquema de arriba). Con la estrategia de salida estructurada por
+    defecto (basada en herramientas), se supone que el modelo devuelve esa
+    narrativa mediante una llamada oculta a una herramienta de
+    estructuración — pero una narrativa simple se lee como una respuesta de
+    chat normal, así que el modelo tiende a escribirla directamente como
+    prosa en vez de llamar a la herramienta. Como nada le avisa al grafo que
+    el turno terminó, sigue invocando al modelo una y otra vez. Por eso, igual
+    que el nodo de diagnósticos en la Parte 5, el HPI usa
+    `ProviderStrategy(schema=...)` — el `format` nativo de JSON-schema de
+    Ollama — en lugar de eso, evitando por completo la llamada a herramienta.
     """)
     return
 
@@ -182,8 +186,8 @@ def _(ChatOllama, httpx, os):
     OLLAMA_TEMPERATURE = float(os.getenv("OLLAMA_TEMPERATURE", "0.1"))
     OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "300"))
 
-    # A low temperature keeps extraction near-deterministic; used by every
-    # tool-free node (HPI, vitals, physical exam).
+    # Una temperature baja mantiene la extracción casi determinista; se usa en
+    # todos los nodos sin herramientas (HPI, signos vitales, examen físico).
     extraction_model = ChatOllama(
         model=OLLAMA_MODEL,
         num_ctx=20480,
@@ -204,10 +208,11 @@ def _(ChatOllama, httpx, os):
 def _(OLLAMA_MODEL, mo):
     mo.callout(
         mo.md(
-            f"Every cell below makes a **live call** to the local Ollama model "
-            f"`{OLLAMA_MODEL}` — there is no cached or pre-computed fallback. "
-            f"Make sure `ollama serve` is running and the model is pulled "
-            f"(`ollama pull {OLLAMA_MODEL}`) before running this notebook."
+            f"Cada celda de acá abajo hace una **llamada en vivo** al modelo "
+            f"Ollama local `{OLLAMA_MODEL}` — no hay ningún fallback cacheado "
+            f"ni precalculado. Asegurate de tener `ollama serve` corriendo y "
+            f"el modelo descargado (`ollama pull {OLLAMA_MODEL}`) antes de "
+            f"ejecutar este notebook."
         ),
         kind="warn",
     )
@@ -223,11 +228,12 @@ def _(repo_root):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    **Tracing (optional).** Same as `agent.py`'s `get_callbacks()`: Langfuse
-    tracing turns on only when `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` are
-    set (see `.env.example`), so the notebook runs fine with no tracing
-    configured. When they are set, every agent call below is traced and
-    visible in the Langfuse UI.
+    **Tracing (opcional).** Igual que `get_callbacks()` en `agent.py`: el
+    tracing de Langfuse se activa solo cuando `LANGFUSE_PUBLIC_KEY`/
+    `LANGFUSE_SECRET_KEY` están configuradas (ver `.env.example`), así que el
+    notebook funciona perfectamente sin ningún tracing configurado. Cuando
+    están configuradas, cada llamada al agente de acá abajo queda registrada
+    y es visible en la interfaz de Langfuse.
     """)
     return
 
@@ -235,7 +241,7 @@ def _(mo):
 @app.cell
 def _(os):
     def get_callbacks() -> list:
-        """Return LangChain callbacks for tracing (Langfuse if configured, else none)."""
+        """Retorna los callbacks de LangChain para tracing (Langfuse si está configurado, si no, ninguno)."""
         if not (os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY")):
             return []
 
@@ -254,24 +260,29 @@ def _(
     get_callbacks,
 ):
     def build_agent(llm, system_prompt, task_prompt, response_format, tools=None, call_limit=8):
-        """Build a scribe sub-agent from its task prompt and output schema.
+        """Construye un subagente scribe a partir de su prompt de tarea y su esquema de salida.
 
-        Every sub-agent shares the same model-call recipe, differing only in
-        its task `prompt`, `response_format`, optional `tools`, and (for
-        diagnoses-with-tool) `call_limit` — this is the same `build_agent`
-        helper `agent.py` uses for all four nodes.
+        Cada subagente comparte la misma receta de llamada al modelo, y solo
+        difiere en su `prompt` de tarea, su `response_format`, las `tools`
+        opcionales y (para diagnósticos con herramienta) el `call_limit` —
+        es el mismo helper `build_agent` que `agent.py` usa para los cuatro
+        nodos.
 
-        `ModelCallLimitMiddleware` is a fail-fast safety net: a tool-based
-        structured-output agent that never calls its hidden structuring tool
-        (see the HPI node below) loops inside create_agent without raising an
-        exception, so `ModelRetryMiddleware` alone never catches it. Capping
-        model calls turns that silent multi-minute loop into a clear error.
+        `ModelCallLimitMiddleware` es una red de seguridad de fallo rápido:
+        un agente de salida estructurada basado en herramientas que nunca
+        llama a su herramienta oculta de estructuración (ver el nodo HPI más
+        abajo) queda en bucle dentro de create_agent sin lanzar ninguna
+        excepción, por lo que `ModelRetryMiddleware` por sí solo nunca lo
+        detecta. Limitar el número de llamadas al modelo convierte ese bucle
+        silencioso de varios minutos en un error claro.
 
-        The default of 8 fits the single-shot extraction agents. The
-        tool-calling diagnoses agent (Part 6) needs a much higher `call_limit`:
-        the small model iteratively re-queries the ICD-10 tool with reworded
-        diagnosis names rather than converging in one or two calls, so 8 is
-        reached before it ever produces a final answer — see Part 6.
+        El valor por defecto de 8 le alcanza a los agentes de extracción de
+        un solo paso. El agente de diagnósticos basado en herramientas
+        (Parte 6) necesita un `call_limit` mucho más alto: el modelo pequeño
+        vuelve a consultar la herramienta de ICD-10 de forma iterativa con
+        nombres de diagnóstico reformulados en lugar de converger en una o
+        dos llamadas, así que se llega a 8 antes de que produzca una
+        respuesta final — ver Parte 6.
         """
         return create_agent(
             model=llm,
@@ -285,7 +296,7 @@ def _(
         )
 
     async def run_agent(agent, transcript):
-        """Invoke a scribe sub-agent over the transcript, return its structured output."""
+        """Invoca un subagente scribe sobre la transcripción y retorna su salida estructurada."""
         result = await agent.ainvoke(
             {
                 "messages": [
@@ -330,23 +341,25 @@ async def _(
 
 @app.cell
 def _(hpi_result, mo):
-    mo.md(f"**Generated HPI:**\n\n{hpi_result.hpi}")
+    mo.md(f"**HPI generado:**\n\n{hpi_result.hpi}")
     return
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Part 4 — Why four focused sub-agents, not one
+    ## Parte 4 — Por qué cuatro subagentes enfocados, y no uno solo
 
-    It would be simpler to ask one agent for the whole `ClinicalNote` in a
-    single pass. In practice, a small local model asked to fill a big schema
-    while also running a tool tends to drop fields — e.g. it reliably drops
-    vitals when it's also busy validating ICD-10 codes in the same pass. So
-    `agent.py` splits the note into four focused nodes — HPI, vitals, physical
-    exam, diagnoses — each with a narrow prompt and a narrow schema, and merges
-    their outputs afterward. We just built the HPI node above; vitals and
-    physical exam follow the exact same pattern.
+    Sería más simple pedirle a un solo agente el `ClinicalNote` completo en
+    una sola pasada. En la práctica, un modelo local pequeño al que se le
+    pide completar un esquema grande mientras además corre una herramienta
+    tiende a dejar campos vacíos — por ejemplo, deja de lado los signos
+    vitales de forma consistente cuando también está ocupado validando
+    códigos ICD-10 en la misma pasada. Por eso `agent.py` divide la nota en
+    cuatro nodos enfocados — HPI, signos vitales, examen físico,
+    diagnósticos — cada uno con un prompt acotado y un esquema acotado, y
+    combina sus salidas después. Recién construimos el nodo de HPI arriba;
+    signos vitales y examen físico siguen exactamente el mismo patrón.
     """)
     return
 
@@ -392,30 +405,34 @@ async def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Part 5 — Diagnoses without a tool (the baseline)
+    ## Parte 5 — Diagnósticos sin herramienta (la línea base)
 
-    Before adding the ICD-10 tool in Part 6, look at the diagnoses agent
-    without one — this is `agent.py`'s default (`--use-tool` is opt-in). The
-    model assigns ICD-10-CM codes from its own training knowledge, using
-    `prompts/diagnoses_prompt.txt` — the tool-less variant of the diagnoses
-    instructions, as opposed to `diagnoses_prompt_with_tool.txt`.
+    Antes de agregar la herramienta de ICD-10 en la Parte 6, veamos el agente
+    de diagnósticos sin ella — es el comportamiento por defecto de `agent.py`
+    (`--use-tool` es opcional). El modelo asigna códigos ICD-10-CM a partir de
+    su propio conocimiento de entrenamiento, usando `prompts/diagnoses_prompt.txt`
+    — la variante sin herramienta de las instrucciones de diagnósticos, en
+    contraste con `diagnoses_prompt_with_tool.txt`.
 
-    Even without a tool, this node still uses `ProviderStrategy(schema=...)`
-    rather than the default tool-based strategy, the same native JSON-schema
-    reasoning as HPI in Part 3. The difference here is the model: `agent.py`
-    swaps in a *non-reasoning* model (`reasoning=False`) for this path. With
-    reasoning enabled and no tool to call, the model tends to emit a long
-    free-form reasoning preamble before finally producing the JSON — slow, and
-    unnecessary when there's no tool result to reason about.
+    Incluso sin herramienta, este nodo sigue usando `ProviderStrategy(schema=...)`
+    en vez de la estrategia por defecto basada en herramientas, el mismo
+    razonamiento de JSON-schema nativo que el HPI en la Parte 3. La
+    diferencia acá es el modelo: `agent.py` cambia a un modelo *sin
+    razonamiento* (`reasoning=False`) para este camino. Con el razonamiento
+    activado y sin ninguna herramienta que llamar, el modelo tiende a emitir
+    un preámbulo largo de razonamiento libre antes de finalmente producir el
+    JSON — lento, e innecesario cuando no hay ningún resultado de herramienta
+    sobre el cual razonar.
     """)
     return
 
 
 @app.cell
 def _(ChatOllama, OLLAMA_MODEL, OLLAMA_TIMEOUT, httpx):
-    # Same params as tool_model (Part 6), minus reasoning: used without the
-    # ICD-10 tool so reasoning is never enabled when there's no tool result to
-    # reason about.
+    # Se usa sin la herramienta de ICD-10, así que el razonamiento nunca se
+    # activa cuando no hay ningún resultado de herramienta sobre el cual
+    # razonar (contrastar con select_model en la Parte 6, que sí tiene
+    # resultados de herramienta sobre los cuales razonar).
     tool_model_no_reasoning = ChatOllama(
         model=OLLAMA_MODEL,
         num_ctx=20480,
@@ -464,145 +481,211 @@ async def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Part 6 — Diagnoses, and the ICD-10 tool
+    ## Parte 6 — Diagnósticos, de forma determinista (extraer → buscar → seleccionar)
 
-    Now add the ICD-10 tool to the same diagnoses task: the model must not
-    invent ICD-10-CM codes from memory, so it's given a
-    `search_icd10_codes_batch` tool and instructed to assign only codes the
-    tool actually returned (see `prompts/diagnoses_prompt_with_tool.txt`).
+    La primera versión de este nodo le daba la herramienta de ICD-10
+    directamente al agente de diagnósticos y dejaba que él decidiera, turno a
+    turno, si buscar y cuántas veces hacerlo con `search_icd10_codes_batch`.
+    En la práctica el modelo pequeño no converge: vuelve a consultar la
+    herramienta una y otra vez con nombres de diagnóstico progresivamente
+    reformulados en lugar de asentarse después de una sola llamada en lote.
+    El flag `--deterministic` de `agent.py` reemplaza ese bucle autónomo por
+    un pipeline fijo — esto es lo que hace.
 
-    This node also uses `ProviderStrategy(schema=...)` instead of the default
-    (tool-based) structured-output strategy. With the default strategy,
-    structured output is itself implemented as a hidden tool call — which then
-    competes with the ICD-10 tool, and a small model tends to answer in prose
-    instead, silently dropping the structured result. `ProviderStrategy` uses
-    Ollama's native JSON-schema `format` (grammar-constrained generation)
-    instead, so the domain tool and the structured output no longer compete for
-    the same "call a tool" decision. Unlike the no-tool baseline in Part 5,
-    reasoning is turned back on (`tool_model`, below) — the agent now has an
-    actual tool result to reason about before answering.
+    Tres pasos, de los cuales solo dos son llamadas al LLM — la llamada a la
+    herramienta en sí nunca es una decisión del modelo:
 
-    One more difference from Part 5: this agent is built with a higher
-    `call_limit` (20, vs. `build_agent`'s default of 8). The small model tends
-    to re-query the ICD-10 tool several times with progressively reworded
-    diagnosis names rather than settling after one batched call, so 8 model
-    calls can be exhausted before it ever produces a final answer — not
-    because it's stuck, but because this workflow genuinely takes more turns.
+    1. **Extraer candidatos** (LLM, sin herramientas) — listar cada
+       diagnóstico candidato discutido o implícito en la transcripción, cada
+       uno con un `search_term` para la búsqueda y un `candidate_name` con
+       toda la especificidad para el eventual código. Todavía no se asigna
+       ningún código.
+    2. **Buscar una sola vez** (código plano, sin LLM) — deduplicar el
+       `search_term` de cada candidato y llamar a `search_icd10_hybrid_batch`
+       exactamente una vez, sin importar cuántos candidatos haya.
+    3. **Seleccionar** (LLM, sin herramientas) — dados la transcripción y los
+       resultados de búsqueda ya obtenidos para cada candidato, elegir el
+       código correcto por candidato (u omitirlo si ninguno de sus
+       resultados es una coincidencia genuina), y luego consolidar en
+       diferenciales + valoración.
+
+    Esto cambia la flexibilidad del agente basado en herramientas — podía
+    volver a buscar si una primera pasada se veía débil — por una garantía
+    sólida contra el modo de falla de reintentos/llamadas repetidas que lo
+    motivó.
     """)
     return
-
-
-@app.cell
-def _(repo_root, search_icd10_hybrid_batch, tool):
-    icd10_path = str(repo_root / "data" / "ICD10_DB.parquet")
-
-    @tool
-    def search_icd10_codes_batch(diagnosis_names: list[str], limit: int = 25) -> dict:
-        """Search active ICD-10-CM codes for many diagnosis names at once.
-
-        Returns a mapping of each name to its list of {"icd10_code",
-        "description", "score"} candidates, best match first.
-        """
-        return search_icd10_hybrid_batch(diagnosis_names, limit=limit, path=icd10_path)
-
-    return (search_icd10_codes_batch,)
-
-
-@app.cell
-def _(ChatOllama, OLLAMA_MODEL, OLLAMA_TIMEOUT, httpx):
-    # Same params as extraction_model, but with reasoning on and more headroom
-    # for output tokens — the diagnoses node reasons through a multi-step
-    # tool workflow (see diagnoses_prompt_with_tool.txt).
-    tool_model = ChatOllama(
-        model=OLLAMA_MODEL,
-        num_ctx=20480,
-        keep_alive="15m",
-        validate_model_on_init=True,
-        temperature=0.1,
-        reasoning=True,
-        num_predict=4096,
-        client_kwargs={
-            "timeout": httpx.Timeout(connect=10.0, read=OLLAMA_TIMEOUT, write=30.0, pool=10.0)
-        },
-    )
-    return (tool_model,)
 
 
 @app.cell
 def _(repo_root):
-    diagnoses_prompt = (
-        (repo_root / "prompts" / "diagnoses_prompt_with_tool.txt").read_text(encoding="utf-8").strip()
-    )
-    return (diagnoses_prompt,)
+    icd10_path = str(repo_root / "data" / "ICD10_DB.parquet")
+    return (icd10_path,)
 
 
 @app.cell
-def _(
+def _(repo_root):
+    diagnoses_candidates_prompt = (
+        (repo_root / "prompts" / "diagnoses_candidates_prompt.txt").read_text(encoding="utf-8").strip()
+    )
+    return (diagnoses_candidates_prompt,)
+
+
+@app.cell
+async def _(
     ProviderStrategy,
     build_agent,
-    diagnoses_prompt,
+    diagnoses_candidates_prompt,
+    extraction_model,
     models,
-    search_icd10_codes_batch,
+    run_agent,
     system_prompt,
-    tool_model,
+    transcript,
 ):
-    diagnoses_agent = build_agent(
-        tool_model,
+    candidates_agent = build_agent(
+        extraction_model,
         system_prompt,
-        diagnoses_prompt,
-        ProviderStrategy(schema=models.DiagnosesOutput),
-        tools=[search_icd10_codes_batch],
-        call_limit=20,
+        diagnoses_candidates_prompt,
+        ProviderStrategy(schema=models.CandidateExtraction),
     )
-    return (diagnoses_agent,)
-
-
-@app.cell
-async def _(diagnoses_agent, get_callbacks, transcript):
-    # Call .ainvoke directly (not the run_agent helper) so we can inspect the
-    # full message trace below, including the ICD-10 tool call the agent makes.
-    diagnoses_full_result = await diagnoses_agent.ainvoke(
-        {"messages": [{"role": "user", "content": f"<transcript>\n{transcript}\n</transcript>"}]},
-        config={"callbacks": get_callbacks()},
-        stream=False,
-    )
-    diagnoses_result = diagnoses_full_result["structured_response"]
-    diagnoses_result
-    return (diagnoses_full_result,)
-
-
-@app.cell
-def _(mo):
-    mo.md("""
-    **ICD-10 tool calls made during the run above:**
-    """)
-    return
-
-
-@app.cell
-def _(diagnoses_full_result):
-    [
-        {"tool": message.name, "result": message.content}
-        for message in diagnoses_full_result["messages"]
-        if getattr(message, "type", None) == "tool"
-    ]
-    return
+    candidate_extraction = await run_agent(candidates_agent, transcript)
+    candidate_extraction
+    return candidate_extraction, candidates_agent
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Part 7 — Composing the nodes into a graph
+    **El paso 2 es código plano, no un agente.** El `search_term` de cada
+    candidato se deduplica y se busca exactamente una vez — sin ningún LLM en
+    el bucle, y sin manera de que el modelo decida volver a buscar.
+    """)
+    return
 
-    Four independent sub-agents aren't yet an agent pipeline. `agent.py` wires
-    them into a LangGraph `StateGraph`: a typed state (`ScribeState`) that each
-    node reads `transcript` from and writes one field to, run sequentially
-    (one Ollama call at a time — reliable against a single local server).
 
-    We reuse the exact sub-agents built above (`hpi_agent`, `vitals_agent`,
-    `physical_exam_agent`, and the ICD-10 tool-enabled `diagnoses_agent` from
-    Part 6, not the baseline from Part 5) as the graph's nodes — composing them
-    is just wiring, no new extraction logic.
+@app.cell
+def _(candidate_extraction, icd10_path, search_icd10_hybrid_batch):
+    search_terms = sorted({candidate.search_term for candidate in candidate_extraction.candidates})
+    search_results = search_icd10_hybrid_batch(search_terms, limit=10, path=icd10_path)
+    search_results
+    return (search_results,)
+
+
+@app.cell
+def _(ChatOllama, OLLAMA_MODEL, OLLAMA_TIMEOUT, httpx):
+    # Razonamiento activado, temp=0/con seed: probado en A/B contra un modelo
+    # sin razonamiento sobre los mismos candidatos/search_results ya
+    # obtenidos — sin razonamiento, el modelo conservaba de forma consistente
+    # (incluso con temp=0) solo uno de varios candidatos bien emparejados,
+    # descartando el resto por completo en vez de recorrer la lista
+    # completa. num_predict es más alto para dejar espacio a ese
+    # razonamiento.
+    select_model = ChatOllama(
+        model=OLLAMA_MODEL,
+        num_ctx=20480,
+        keep_alive="15m",
+        validate_model_on_init=True,
+        temperature=0.0,
+        seed=42,
+        reasoning=True,
+        num_predict=8192,
+        client_kwargs={
+            "timeout": httpx.Timeout(connect=10.0, read=OLLAMA_TIMEOUT, write=30.0, pool=10.0)
+        },
+    )
+    return (select_model,)
+
+
+@app.cell
+def _(repo_root):
+    diagnoses_selection_prompt = (
+        (repo_root / "prompts" / "diagnoses_selection_prompt.txt").read_text(encoding="utf-8").strip()
+    )
+    return (diagnoses_selection_prompt,)
+
+
+@app.cell
+async def _(
+    ProviderStrategy,
+    build_agent,
+    candidate_extraction,
+    diagnoses_selection_prompt,
+    get_callbacks,
+    json,
+    models,
+    search_results,
+    select_model,
+    system_prompt,
+    transcript,
+):
+    # Incluir la transcripción original junto con los candidatos: sin ella,
+    # este paso no tiene forma de notar que los resultados de búsqueda de un
+    # candidato son todos malas coincidencias (en vez de opciones
+    # razonables) y simplemente elige la menos mala en lugar de omitir el
+    # candidato.
+    candidate_blocks = [
+        f"- candidate_name: {candidate.candidate_name}\n"
+        f"  section: {candidate.section}\n"
+        f"  search_results: {json.dumps(search_results.get(candidate.search_term, []))}"
+        for candidate in candidate_extraction.candidates
+    ]
+    candidates_context = "\n".join(candidate_blocks) or "(no candidates extracted)"
+
+    select_agent = build_agent(
+        select_model,
+        system_prompt,
+        diagnoses_selection_prompt,
+        ProviderStrategy(schema=models.DiagnosesOutput),
+    )
+    select_full_result = await select_agent.ainvoke(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": (
+                        f"<transcript>\n{transcript}\n</transcript>\n\n"
+                        f"<candidates>\n{candidates_context}\n</candidates>"
+                    ),
+                }
+            ]
+        },
+        config={"callbacks": get_callbacks()},
+        stream=False,
+    )
+    diagnoses_result = select_full_result["structured_response"]
+
+    # Reforzar en código que "cada código aparece en exactamente una lista",
+    # en vez de confiar únicamente en la instrucción del prompt: el modelo
+    # seguía duplicando un código en ambas listas de vez en cuando incluso
+    # después de agregar esa regla al prompt.
+    _assessment_codes = {d.icd10_code for d in diagnoses_result.assessment}
+    diagnoses_result.differential_diagnoses = [
+        d for d in diagnoses_result.differential_diagnoses if d.icd10_code not in _assessment_codes
+    ]
+    diagnoses_result
+    return (select_agent,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Parte 7 — Componiendo los nodos en un grafo
+
+    Cuatro subagentes independientes todavía no son un pipeline de agente.
+    `agent.py` los conecta en un `StateGraph` de LangGraph: un estado
+    tipado (`ScribeState`) del que cada nodo lee `transcript` y en el que
+    escribe un campo, ejecutados de forma secuencial (una llamada a Ollama a
+    la vez — confiable contra un único servidor local).
+
+    Reutilizamos exactamente las piezas construidas arriba: `hpi_agent`,
+    `vitals_agent` y `physical_exam_agent` de las Partes 3–4, más el pipeline
+    determinista de extraer/buscar/seleccionar diagnósticos de la Parte 6 (no
+    las líneas base basada en herramientas o sin herramienta) — componerlos
+    es solo cableado, sin lógica de extracción nueva. El nodo de diagnósticos
+    es la única excepción a "una llamada a Ollama por nodo": en realidad son
+    tres pasos (dos llamadas al LLM alrededor de una búsqueda de ICD-10
+    plana), envueltos en una sola función para que siga viéndose como
+    cualquier otro nodo desde el punto de vista del grafo.
     """)
     return
 
@@ -610,7 +693,7 @@ def _(mo):
 @app.cell
 def _(TypedDict, models):
     class ScribeState(TypedDict):
-        """State threaded through the scribe graph: one input, four outputs."""
+        """Estado que atraviesa el grafo scribe: una entrada, cuatro salidas."""
 
         transcript: str
         hpi: models.HistoryOfPresentIllness
@@ -623,10 +706,15 @@ def _(TypedDict, models):
 
 @app.cell
 def _(
-    diagnoses_agent,
+    candidates_agent,
+    get_callbacks,
     hpi_agent,
+    icd10_path,
+    json,
     physical_exam_agent,
     run_agent,
+    search_icd10_hybrid_batch,
+    select_agent,
     vitals_agent,
 ):
     async def hpi_node(state):
@@ -639,7 +727,45 @@ def _(
         return {"physical_exam": await run_agent(physical_exam_agent, state["transcript"])}
 
     async def diagnoses_node(state):
-        return {"diagnoses": await run_agent(diagnoses_agent, state["transcript"])}
+        # Refleja los tres pasos de la Parte 6, corridos contra la
+        # transcripción propia de este nodo en vez de la variable
+        # `transcript` a nivel del notebook.
+        transcript = state["transcript"]
+        candidate_extraction = await run_agent(candidates_agent, transcript)
+
+        search_terms = sorted({c.search_term for c in candidate_extraction.candidates})
+        search_results = search_icd10_hybrid_batch(search_terms, limit=10, path=icd10_path)
+
+        candidate_blocks = [
+            f"- candidate_name: {c.candidate_name}\n"
+            f"  section: {c.section}\n"
+            f"  search_results: {json.dumps(search_results.get(c.search_term, []))}"
+            for c in candidate_extraction.candidates
+        ]
+        candidates_context = "\n".join(candidate_blocks) or "(no candidates extracted)"
+
+        select_full_result = await select_agent.ainvoke(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": (
+                            f"<transcript>\n{transcript}\n</transcript>\n\n"
+                            f"<candidates>\n{candidates_context}\n</candidates>"
+                        ),
+                    }
+                ]
+            },
+            config={"callbacks": get_callbacks()},
+            stream=False,
+        )
+        diagnoses = select_full_result["structured_response"]
+
+        assessment_codes = {d.icd10_code for d in diagnoses.assessment}
+        diagnoses.differential_diagnoses = [
+            d for d in diagnoses.differential_diagnoses if d.icd10_code not in assessment_codes
+        ]
+        return {"diagnoses": diagnoses}
 
     return diagnoses_node, hpi_node, physical_exam_node, vitals_node
 
@@ -686,10 +812,11 @@ async def _(get_callbacks, scribe_graph, transcript):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Part 8 — The assembled `ClinicalNote`
+    ## Parte 8 — El `ClinicalNote` ensamblado
 
-    `extract_note()` in `agent.py` does exactly this merge: pull each node's
-    result out of the final graph state and assemble one `ClinicalNote`.
+    `extract_note()` en `agent.py` hace exactamente esta combinación: extrae
+    el resultado de cada nodo desde el estado final del grafo y ensambla un
+    único `ClinicalNote`.
     """)
     return
 
@@ -715,8 +842,9 @@ def _(clinical_note, mo):
 
 @app.cell
 def _(os):
-    # Flush any pending Langfuse traces before moving on, same as agent.py's
-    # main() — otherwise buffered spans from this session may not be sent.
+    # Enviar cualquier trace pendiente de Langfuse antes de seguir, igual que
+    # main() en agent.py — si no, los spans acumulados durante esta sesión
+    # podrían no llegar a enviarse.
     if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
         from langfuse import get_client
 
@@ -727,16 +855,16 @@ def _(os):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Next: notebook 2 — evaluating what the agent produces
+    ## Sigue: notebook 2 — evaluando lo que produce el agente
 
-    This notebook only builds; it never asks whether the output is *good*.
-    That's `evals/`: deterministic checks (`eval_diagnoses.py`, `eval_vitals.py`,
-    `eval_trajectory.py`) comparing extracted output against
-    `data/golden/golden_encounter_*.json`, plus LLM-as-a-judge scoring
-    (`evals/eval_hpi_judge.py`, `evals/eval_clinical_note_dataset.py`) for the
-    free-text sections a deterministic diff can't grade. See the README's
-    "Evals" section for how to run each one — or run the CLI directly on this
-    same transcript:
+    Este notebook solo construye; nunca pregunta si la salida es *buena*. Eso
+    es trabajo de `evals/`: chequeos deterministas (`eval_diagnoses.py`,
+    `eval_vitals.py`, `eval_trajectory.py`) que comparan la salida extraída
+    contra `data/golden/golden_encounter_*.json`, más scoring con
+    LLM-as-a-Judge (`evals/eval_hpi_judge.py`, `evals/eval_clinical_note_dataset.py`)
+    para las secciones de texto libre que un diff determinista no puede
+    calificar. Ver la sección "Evals" del README para saber cómo correr cada
+    uno — o ejecutar la CLI directamente sobre esta misma transcripción:
 
     ```
     uv run python agent.py data/encounter_riv001.txt --use-tool -o outputs/encounter_riv001.json
