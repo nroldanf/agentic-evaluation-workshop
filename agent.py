@@ -6,8 +6,8 @@ Reads a patient-doctor transcript, uses Ollama to extract a structured
 Four focused sub-agents each extract one section of the note — history of present
 illness (HPI), vitals, physical exam, and diagnoses — and their outputs are merged
 into a single `ClinicalNote`. They are all built by one `build_agent(prompt,
-response_format, tools)` helper and run as nodes of a LangGraph `StateGraph`,
-either sequentially (default) or in parallel (`--parallel`).
+response_format, tools)` helper and run sequentially as nodes of a LangGraph
+`StateGraph`.
 
 Structured output is handled natively by `create_agent` through the
 `response_format=` parameter: the validated Pydantic instance is returned at
@@ -340,7 +340,7 @@ class ScribeState(TypedDict):
     """State for the scribe graph.
 
     Inputs: transcript, diagnoses_prompt, use_tool, deterministic.
-    Outputs (written by parallel nodes): hpi, vitals, physical_exam, diagnoses.
+    Outputs (written by each node): hpi, vitals, physical_exam, diagnoses.
     """
 
     transcript: str
@@ -612,29 +612,6 @@ _NODE_SPECS = {
 }
 
 
-def build_parallel_graph(cache=None, nodes: list[str] | None = None):
-    """The selected nodes run in parallel, then merge (default: all four).
-
-    Needs a local Ollama server configured for concurrency (OLLAMA_NUM_PARALLEL >= 4);
-    otherwise the simultaneous structured-output calls can return empty responses.
-    Kept for when the server is configured for parallelism.
-
-    When a `cache` backend is passed, each node caches its result under a policy
-    keyed on that node's inputs (see make_cache_key).
-    """
-    nodes = nodes if nodes is not None else ALL_NODES
-    enabled = cache is not None
-    builder = StateGraph(ScribeState)
-    # Fan-out from START (parallel), fan-in to END. The nodes write different
-    # state keys, so no reducers are needed.
-    for name in nodes:
-        fn, prompt = _NODE_SPECS[name]
-        builder.add_node(name, fn, cache_policy=_cache_policy(enabled, prompt))
-        builder.add_edge(START, name)
-        builder.add_edge(name, END)
-    return builder.compile(cache=cache)
-
-
 def build_sequential_graph(cache=None, nodes: list[str] | None = None):
     """The selected nodes run in order, one Ollama call at a time (default: all four).
 
@@ -665,16 +642,14 @@ async def extract_note(
     diagnoses_prompt: str,
     use_tool: bool = False,
     deterministic: bool = False,
-    parallel: bool = False,
     cache: bool = False,
     nodes: list[str] | None = None,
 ) -> ClinicalNote:
-    """Run the scribe graph and merge its parallel outputs into a ClinicalNote.
+    """Run the scribe graph and merge its outputs into a ClinicalNote.
 
     The HPI, vitals, and physical exam nodes (tool-free) and the diagnoses node
-    (ICD-10 tool when `use_tool`) run either sequentially (default, single local
-    Ollama server) or in parallel (`parallel=True`, requires OLLAMA_NUM_PARALLEL
-    >= 4); their results are combined here.
+    (ICD-10 tool when `use_tool`) run sequentially (one Ollama call at a time);
+    their results are combined here.
 
     `deterministic` only matters when `use_tool` is set: it swaps the diagnoses
     node's tool-calling agent for the deterministic extract/search/select
@@ -692,14 +667,9 @@ async def extract_note(
     cache_backend = build_cache() if cache else None
     if cache_backend is not None:
         logger.info("Node caching enabled (DiskCache at %s, ttl=%s)", CACHE_DIR, CACHE_TTL)
-    scribe_graph = (
-        build_parallel_graph(cache_backend, nodes)
-        if parallel
-        else build_sequential_graph(cache_backend, nodes)
-    )
+    scribe_graph = build_sequential_graph(cache_backend, nodes)
     logger.info(
-        "Running scribe graph (%s) over transcript (%d chars), nodes=%s, ICD-10 tool %s%s",
-        "parallel" if parallel else "sequential",
+        "Running scribe graph over transcript (%d chars), nodes=%s, ICD-10 tool %s%s",
         len(transcript),
         ",".join(nodes),
         "enabled" if use_tool else "disabled",
@@ -713,10 +683,7 @@ async def extract_note(
             "use_tool": use_tool,
             "deterministic": deterministic,
         },
-        config={
-            "callbacks": get_callbacks(),
-            "max_concurrency": 1,
-        },
+        config={"callbacks": get_callbacks()},
         stream=False,
     )
     logger.info("Graph finished in %.2fs", time.perf_counter() - start)
@@ -789,15 +756,6 @@ def parse_args() -> argparse.Namespace:
             "model extracts candidates, the ICD-10 lookup runs directly in code "
             "exactly once, then the model selects codes from those results — no "
             "model-driven decision about whether or how many times to search."
-        ),
-    )
-    parser.add_argument(
-        "--parallel",
-        action="store_true",
-        help=(
-            "Run the HPI, vitals, physical exam, and diagnoses nodes in parallel "
-            "instead of sequentially. Requires a local Ollama server configured for "
-            "concurrency (OLLAMA_NUM_PARALLEL >= 4)."
         ),
     )
     node_group = parser.add_mutually_exclusive_group()
@@ -875,7 +833,6 @@ async def main() -> None:
         diagnoses_prompt,
         use_tool=args.use_tool,
         deterministic=args.deterministic,
-        parallel=args.parallel,
         cache=args.cache,
         nodes=nodes,
     )

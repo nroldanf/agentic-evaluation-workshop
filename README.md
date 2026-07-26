@@ -5,8 +5,7 @@ transcripción (transcript) de una consulta médico–paciente, usa un modelo lo
 de Ollama ([`qwen3.5:9b`](https://ollama.com/library/qwen3.5:9b) por defecto) para extraer una nota clínica estructurada
 y la guarda en `outputs/`. La historia de la enfermedad actual (HPI), los signos
 vitales (vitals), el examen físico (physical exam) y los diagnósticos se extraen
-mediante nodes (nodos) separados que pueden ejecutarse de forma secuencial (por
-defecto) o en paralelo.
+mediante nodes (nodos) separados, ejecutados de forma secuencial.
 
 ## Arquitectura
 
@@ -23,12 +22,12 @@ tools)`:
   enum fijo (`PhysicalExamSystem`: general, heent, neck, cardiovascular,
   respiratory, …). Sin tools.
 - **diagnoses node** (`DiagnosesOutput`) — extrae los diagnósticos diferenciales
-  (los 3 más relevantes) y el assessment; opcionalmente llama al tool de búsqueda
-  de ICD-10.
+  (los 3 más relevantes) y el assessment. Con `--use-tool` valida los códigos
+  contra el tool de búsqueda de ICD-10, mediante un agent con tool-calling (por
+  defecto) o, con `--deterministic`, mediante un pipeline de tres pasos con
+  búsqueda determinística (ver más abajo).
 
 Sus salidas se combinan en un único `ClinicalNote`.
-
-**Secuencial (por defecto):**
 
 ```mermaid
 flowchart LR
@@ -41,20 +40,34 @@ flowchart LR
     T -.-> D
 ```
 
-**Paralelo (`--parallel`):**
+### Diagnósticos determinísticos (`--deterministic`)
+
+Con `--use-tool --deterministic`, el diagnoses node reemplaza el agent con
+tool-calling por un pipeline fijo de tres pasos, para que la búsqueda de
+ICD-10 ocurra exactamente una vez, en código, en vez de quedar a discreción
+del modelo (que en la versión con tool-calling podía repetir o reformular la
+búsqueda varias veces antes de converger):
 
 ```mermaid
 flowchart LR
-    S([START]) --> H["hpi node<br/>(HistoryOfPresentIllness)"]
-    S --> V["vitals node<br/>(VitalSigns)"]
-    S --> P["physical exam node<br/>(PhysicalExam)"]
-    S --> D["diagnoses node<br/>(DiagnosesOutput)"]
-    H --> E([END])
-    V --> E
-    P --> E
-    D --> E
-    D -.->|"--use-tool"| T["search_icd10_codes_batch"]
-    T -.-> D
+    S([START]) --> EC["extract_candidates<br/>(LLM, sin tools)"]
+    EC --> SC["search_candidates<br/>(Python puro, una sola búsqueda)"]
+    SC --> SD["select_diagnoses<br/>(LLM, con reasoning)"]
+    SD --> E([END])
+```
+
+1. **`extract_candidates`** — un LLM sin tools lista cada diagnóstico candidato
+   discutido o implícito en el transcript (tanto diferenciales como
+   assessment), junto con un `search_term` corto para buscarlo.
+2. **`search_candidates`** — código puro: busca cada `search_term` una única
+   vez contra el catálogo de ICD-10 (sin LLM de por medio).
+3. **`select_diagnoses`** — un LLM (con reasoning habilitado) recibe el
+   transcript original junto a los resultados ya buscados de cada candidato, y
+   elige el código correcto de entre esos resultados — o descarta el
+   candidato si ninguno es un match genuino — y consolida el resultado final.
+
+```bash
+uv run python agent.py --use-tool --deterministic
 ```
 
 ## Prerequisites
@@ -106,19 +119,6 @@ también cambia el diagnoses prompt por defecto a
 
 ```bash
 uv run python agent.py --use-tool
-```
-
-### Ejecución secuencial vs. paralela
-
-Por defecto, los cuatro nodes (hpi, vitals, physical exam y diagnoses) se
-ejecutan de forma **secuencial** (una llamada a Ollama a la vez), lo cual es
-confiable contra un único servidor local. Agrega `--parallel` para ejecutarlos de
-forma concurrente — esto requiere un servidor local de Ollama configurado para
-concurrencia (`OLLAMA_NUM_PARALLEL >= 4`); de lo contrario, las llamadas
-simultáneas pueden devolver respuestas vacías.
-
-```bash
-uv run python agent.py --parallel
 ```
 
 ### Ejecutar solo algunos nodes
@@ -191,19 +191,16 @@ OLLAMA_MODEL="llama3.1:8b" uv run python agent.py
 Todos los prompts se leen desde archivos en `prompts/`, así que puedes editarlos
 sin tocar el código:
 
-- `prompts/system_prompt.txt` — el rol/instrucciones compartidos del scribe; se
-  antepone al prompt de cada node para formar su system prompt.
-- `prompts/hpi_prompt.txt` — las instrucciones para el hpi node (redacción de la
-  historia de la enfermedad actual como párrafo narrativo).
-- `prompts/vitals_prompt.txt` — las instrucciones para el vitals node dedicado.
-- `prompts/physical_exam_prompt.txt` — las instrucciones para el physical exam
-  node (hallazgos por sistema corporal).
-- `prompts/diagnoses_prompt.txt` — las instrucciones de extracción de
-  diagnósticos (los 3 diferenciales más relevantes + assessment). Puedes
-  sobrescribirlo por ejecución con `-d/--diagnoses-prompt`.
-- `prompts/diagnoses_prompt_with_tool.txt` — las instrucciones de extracción de
-  diagnósticos usadas cuando `--use-tool` está activo (guían al agent a través
-  del tool de ICD-10).
+| Archivo | Usado por | Instrucciones |
+| --- | --- | --- |
+| `prompts/system_prompt.txt` | todos los nodes | Rol/instrucciones compartidos del scribe; se antepone al prompt de cada node para formar su system prompt. |
+| `prompts/hpi_prompt.txt` | hpi node | Redacción de la historia de la enfermedad actual como párrafo narrativo. |
+| `prompts/vitals_prompt.txt` | vitals node | Extracción de los signos vitales. |
+| `prompts/physical_exam_prompt.txt` | physical exam node | Hallazgos del examen físico por sistema corporal. |
+| `prompts/diagnoses_prompt.txt` | diagnoses node (sin `--use-tool`) | Extracción de diagnósticos (los 3 diferenciales más relevantes + assessment). Puedes sobrescribirlo por ejecución con `-d/--diagnoses-prompt`. |
+| `prompts/diagnoses_prompt_with_tool.txt` | diagnoses node (`--use-tool`, sin `--deterministic`) | Guía al agent con tool-calling a través del tool de ICD-10. |
+| `prompts/diagnoses_candidates_prompt.txt` | `extract_candidates` (`--use-tool --deterministic`) | Lista los diagnósticos candidatos y su `search_term`, sin asignar códigos. |
+| `prompts/diagnoses_selection_prompt.txt` | `select_diagnoses` (`--use-tool --deterministic`) | Elige el código de cada candidato a partir de los resultados ya buscados, y consolida el resultado final. |
 
 ## Tracing (opcional)
 
