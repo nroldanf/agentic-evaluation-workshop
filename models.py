@@ -118,6 +118,46 @@ class Assessment(Diagnosis):
     """One of the clinician's primary or working diagnoses for the encounter."""
 
 
+class DiagnosisCandidate(BaseModel):
+    """One candidate diagnosis extracted from the transcript, before ICD-10 lookup.
+
+    Splits the clinical name from the search query used to look it up: the
+    query degrades on longer, over-qualified text, so it's kept separately and
+    deliberately less specific than the name it's paired with.
+    """
+
+    candidate_name: str = Field(
+        description=(
+            "Precise clinical name with full specificity: laterality, body site, "
+            "and acuity (initial encounter, follow-up, or sequela) where the "
+            "transcript supports it. Never an abbreviation, acronym, or "
+            "colloquialism, e.g. 'atrial fibrillation' not 'afib'."
+        ),
+    )
+    search_term: str = Field(
+        description=(
+            "Short ICD-10-CM search query for this single candidate: the core "
+            "condition name only, covering exactly one body site, with no "
+            "laterality/acuity qualifier, e.g. 'compartment syndrome' for a "
+            "candidate_name of 'traumatic compartment syndrome of the left upper "
+            "extremity, initial encounter'."
+        ),
+    )
+    section: str = Field(
+        description="Either 'differential' (possible condition considered) or "
+        "'assessment' (primary/working diagnosis being actively treated).",
+    )
+
+
+class CandidateExtraction(BaseModel):
+    """All candidate diagnoses extracted from a transcript, before ICD-10 lookup."""
+
+    candidates: list[DiagnosisCandidate] = Field(
+        default_factory=list,
+        description="Every candidate diagnosis discussed or implied by the transcript.",
+    )
+
+
 class DiagnosesOutput(BaseModel):
     """Diagnoses portion of a clinical note (differentials + assessment).
 

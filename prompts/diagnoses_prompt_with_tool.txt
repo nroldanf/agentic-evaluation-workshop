@@ -34,12 +34,14 @@ STEP 1 — Extract initial candidates (no codes yet):
 - Do NOT assign ICD-10-CM codes in this step.
 
 STEP 2 — Validate the candidates by searching:
-- Call the `search_icd10_codes_batch` tool EXACTLY ONCE, passing the `search_term` (NOT
-  the `candidate_name`) for ALL candidates from Step 1.
+- Call the `search_icd10_codes_batch` tool, passing the `search_term` (NOT the
+  `candidate_name`) for ALL candidates from Step 1, with `limit` set to 10.
 - For each candidate, compare the returned descriptions against its `candidate_name`'s
   full intended meaning (laterality, body site, acuity included) and select the ONE code
   that matches best.
 - Code-selection rules:
+  - If NONE of the returned codes is a genuine match for a candidate, OMIT that candidate
+    entirely rather than forcing a wrong code.
   - You MUST choose an ICD-10-CM code that was LITERALLY returned by the tool. NEVER
     construct, infer, or extrapolate a code, even if you believe a more specific one exists.
   - The `diagnosis` you output MUST be the EXACT description the tool returned for the
@@ -48,8 +50,6 @@ STEP 2 — Validate the candidates by searching:
     and acuity) when the transcript supports that level of detail.
   - Do NOT blindly take the first/top result: if the top match is a different condition than
     intended, choose a better one from the list.
-  - If NONE of the returned codes is a genuine match for a candidate, OMIT that candidate
-    entirely rather than forcing a wrong code.
 
 ICD-10 laterality conventions (use when selecting among returned codes):
 - Right = 1, Left = 2, Bilateral = 3, Unspecified = 0 or 9

@@ -39,8 +39,10 @@ import models as models_module
 from cache import DiskCache
 from icd10_search import search_icd10_hybrid, search_icd10_hybrid_batch
 from models import (
+    CandidateExtraction,
     ClinicalNote,
     DiagnosesOutput,
+    DiagnosisCandidate,
     HistoryOfPresentIllness,
     PhysicalExam,
     VitalSigns,
@@ -79,9 +81,18 @@ OUTPUT_PATH = Path("outputs/clinical_note.json")
 SYSTEM_PROMPT_PATH = Path("prompts/system_prompt.txt")
 DIAGNOSES_PROMPT_PATH = Path("prompts/diagnoses_prompt.txt")
 DIAGNOSES_PROMPT_WITH_TOOL_PATH = Path("prompts/diagnoses_prompt_with_tool.txt")
+DIAGNOSES_CANDIDATES_PROMPT_PATH = Path("prompts/diagnoses_candidates_prompt.txt")
+DIAGNOSES_SELECTION_PROMPT_PATH = Path("prompts/diagnoses_selection_prompt.txt")
 VITALS_PROMPT_PATH = Path("prompts/vitals_prompt.txt")
 HPI_PROMPT_PATH = Path("prompts/hpi_prompt.txt")
 PHYSICAL_EXAM_PROMPT_PATH = Path("prompts/physical_exam_prompt.txt")
+
+# ICD-10-CM reference database used by search_icd10_codes/search_icd10_codes_batch.
+# Defaults to the full code set; point this at a narrower parquet (see
+# notebooks/focused_icd10_db.py) to compare search quality on a smaller,
+# domain-scoped database.
+ICD10_DB_PATH = os.getenv("ICD10_DB_PATH", "data/ICD10_DB.parquet")
+logger.info("ICD-10 database: %s", ICD10_DB_PATH)
 
 
 @tool
@@ -109,9 +120,13 @@ def search_icd10_codes(diagnosis_name: str, limit: int = 25) -> list[dict]:
         limit: Maximum number of candidate codes to return.
 
     Returns:
-        A list of {"icd10_code", "description", "score"} candidates.
+        A list of {"icd10_code", "description", "score"} candidates, already
+        sorted best-first — rely on this order, not on the "score" value itself.
+        "score" is an internal ranking signal, not a confidence percentage, and
+        isn't on a fixed scale; close or low-looking scores don't mean the top
+        result is a weak match.
     """
-    return search_icd10_hybrid(diagnosis_name, limit=limit)
+    return search_icd10_hybrid(diagnosis_name, limit=limit, path=ICD10_DB_PATH)
 
 
 @tool
@@ -127,9 +142,13 @@ def search_icd10_codes_batch(diagnosis_names: list[str], limit: int = 25) -> dic
 
     Returns:
         A mapping of each diagnosis name to its list of
-        {"icd10_code", "description", "score"} candidates.
+        {"icd10_code", "description", "score"} candidates, already sorted
+        best-first — rely on this order, not on the "score" value itself.
+        "score" is an internal ranking signal, not a confidence percentage, and
+        isn't on a fixed scale; close or low-looking scores don't mean the top
+        result is a weak match.
     """
-    return search_icd10_hybrid_batch(diagnosis_names, limit=limit)
+    return search_icd10_hybrid_batch(diagnosis_names, limit=limit, path=ICD10_DB_PATH)
 
 
 # The LLM: a local Ollama model. A low temperature keeps extraction near-deterministic.
@@ -183,6 +202,21 @@ tool_model_no_reasoning = ChatOllama(
     reasoning=False,
     num_predict=4096,
 )
+# Used by select_diagnoses_node (deterministic diagnoses workflow): reasoning
+# on, temp=0/seeded. A/B tested against tool_model_no_reasoning on the same
+# pre-fetched candidates/search_results: without reasoning, the model reliably
+# (even at temp=0) kept only one of several well-matched candidates, dropping
+# the rest outright rather than working through the full list — it isn't
+# variance, it consistently can't hold all candidates in a single pass without
+# a scratchpad. With reasoning on, it reliably finds the well-matched
+# candidates instead; num_predict is higher to leave room for that reasoning.
+select_model = ChatOllama(
+    **shared,
+    temperature=0.0,
+    seed=42,
+    reasoning=True,
+    num_predict=8192,
+)
 
 # Number of times to retry a failed model call (e.g. an empty structured-output
 # response) before giving up. Configurable via env var (see .env.example).
@@ -231,6 +265,10 @@ logger.info("Loading HPI prompt from %s", HPI_PROMPT_PATH)
 hpi_prompt = HPI_PROMPT_PATH.read_text(encoding="utf-8").strip()
 logger.info("Loading physical exam prompt from %s", PHYSICAL_EXAM_PROMPT_PATH)
 physical_exam_prompt = PHYSICAL_EXAM_PROMPT_PATH.read_text(encoding="utf-8").strip()
+logger.info("Loading diagnoses candidates prompt from %s", DIAGNOSES_CANDIDATES_PROMPT_PATH)
+diagnoses_candidates_prompt = DIAGNOSES_CANDIDATES_PROMPT_PATH.read_text(encoding="utf-8").strip()
+logger.info("Loading diagnoses selection prompt from %s", DIAGNOSES_SELECTION_PROMPT_PATH)
+diagnoses_selection_prompt = DIAGNOSES_SELECTION_PROMPT_PATH.read_text(encoding="utf-8").strip()
 
 
 # --- Node-level caching (opt-in via --cache) ------------------------------
@@ -301,13 +339,14 @@ def _cache_policy(enabled: bool, task_prompt: str | None) -> CachePolicy | None:
 class ScribeState(TypedDict):
     """State for the scribe graph.
 
-    Inputs: transcript, diagnoses_prompt, use_tool.
+    Inputs: transcript, diagnoses_prompt, use_tool, deterministic.
     Outputs (written by parallel nodes): hpi, vitals, physical_exam, diagnoses.
     """
 
     transcript: str
     diagnoses_prompt: str
     use_tool: bool
+    deterministic: bool
     hpi: HistoryOfPresentIllness
     vitals: VitalSigns
     physical_exam: PhysicalExam
@@ -415,6 +454,116 @@ async def physical_exam_node(state: ScribeState, config: RunnableConfig) -> dict
     return {"physical_exam": await run_agent(agent, state["transcript"], config)}
 
 
+class DiagnosesWorkflowState(TypedDict):
+    """State for the deterministic diagnoses workflow (see build_diagnoses_workflow)."""
+
+    transcript: str
+    candidates: list[DiagnosisCandidate]
+    search_results: dict
+    diagnoses: DiagnosesOutput
+
+
+async def extract_candidates_node(state: DiagnosesWorkflowState, config: RunnableConfig) -> dict:
+    """Extract candidate diagnoses from the transcript; no ICD-10 codes yet.
+
+    Uses `extraction_model` (temperature=0, seeded) rather than
+    `tool_model_no_reasoning`: at temperature=0.1 this step showed real
+    run-to-run variance, occasionally diluting well-supported candidates (e.g.
+    "gas gangrene", "necrotizing fasciitis") with generic trauma-differential
+    boilerplate ("blunt force trauma", "ARDS", "hypovolemic shock from
+    hemorrhage") the transcript didn't actually describe.
+    """
+    logger.info("Diagnoses workflow: extracting candidates (tool-free)")
+    agent = build_agent(
+        extraction_model,
+        diagnoses_candidates_prompt,
+        ProviderStrategy(schema=CandidateExtraction),
+    )
+    result = await run_agent(agent, state["transcript"], config)
+    return {"candidates": result.candidates}
+
+
+async def search_candidates_node(state: DiagnosesWorkflowState, config: RunnableConfig) -> dict:
+    """Look up every candidate's search_term exactly once — deterministic, no LLM call."""
+    terms = sorted({candidate.search_term for candidate in state["candidates"]})
+    logger.info("Diagnoses workflow: searching ICD-10 for %d term(s)", len(terms))
+    results = search_icd10_hybrid_batch(terms, limit=10, path=ICD10_DB_PATH)
+    return {"search_results": results}
+
+
+async def select_diagnoses_node(state: DiagnosesWorkflowState, config: RunnableConfig) -> dict:
+    """Pick the best code per candidate from its pre-fetched results, then consolidate.
+
+    Includes the original transcript alongside the candidates: without it, this
+    step has no way to notice a candidate's search results are all poor matches
+    (rather than reasonable choices) and just picks the least-bad one instead of
+    omitting the candidate — seen in practice with a "penetrating thoracic
+    injury" candidate whose only returned codes were things like a heart-lung
+    transplant infection code, nowhere close to what the transcript describes.
+    """
+    logger.info("Diagnoses workflow: selecting codes from pre-fetched results")
+    candidate_blocks = [
+        f"- candidate_name: {candidate.candidate_name}\n"
+        f"  section: {candidate.section}\n"
+        f"  search_results: {json.dumps(state['search_results'].get(candidate.search_term, []))}"
+        for candidate in state["candidates"]
+    ]
+    context = "\n".join(candidate_blocks) or "(no candidates extracted)"
+
+    agent = build_agent(select_model, diagnoses_selection_prompt, ProviderStrategy(schema=DiagnosesOutput))
+    result = await agent.ainvoke(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": (
+                        f"<transcript>\n{state['transcript']}\n</transcript>\n\n"
+                        f"<candidates>\n{context}\n</candidates>"
+                    ),
+                }
+            ]
+        },
+        config=config,
+        stream=False,
+    )
+    diagnoses: DiagnosesOutput = result["structured_response"]
+
+    # Enforce "each code appears in exactly one list" in code rather than solely
+    # via prompt instruction: the model still duplicated a code across both
+    # lists occasionally even after that rule was added to the prompt. Keep the
+    # assessment entry (every encounter must have one) and drop the duplicate
+    # from differentials.
+    assessment_codes = {d.icd10_code for d in diagnoses.assessment}
+    diagnoses.differential_diagnoses = [
+        d for d in diagnoses.differential_diagnoses if d.icd10_code not in assessment_codes
+    ]
+    return {"diagnoses": diagnoses}
+
+
+def build_diagnoses_workflow():
+    """The deterministic diagnoses pipeline: extract candidates, search once, then select.
+
+    Unlike diagnoses_node's tool-calling agent, the model never decides whether
+    or how many times to search: search_candidates_node calls the ICD-10 lookup
+    directly, exactly once, independent of either LLM step's behavior. This
+    trades the tool-calling agent's flexibility (it can search again if a first
+    pass looks weak) for a hard guarantee against the retry/repeat-call failure
+    modes that motivated it.
+    """
+    builder = StateGraph(DiagnosesWorkflowState)
+    builder.add_node("extract_candidates", extract_candidates_node)
+    builder.add_node("search_candidates", search_candidates_node)
+    builder.add_node("select_diagnoses", select_diagnoses_node)
+    builder.add_edge(START, "extract_candidates")
+    builder.add_edge("extract_candidates", "search_candidates")
+    builder.add_edge("search_candidates", "select_diagnoses")
+    builder.add_edge("select_diagnoses", END)
+    return builder.compile()
+
+
+_diagnoses_workflow = build_diagnoses_workflow()
+
+
 async def diagnoses_node(state: ScribeState, config: RunnableConfig) -> dict:
     """Extract and (optionally) tool-validate the differentials and assessment.
 
@@ -425,8 +574,16 @@ async def diagnoses_node(state: ScribeState, config: RunnableConfig) -> dict:
     default MODEL_CALL_LIMIT: the small model iteratively re-queries the ICD-10
     tool with reworded diagnosis names rather than converging in one or two
     calls, so it legitimately needs more turns than the other nodes.
+
+    When both the tool and `deterministic` are set, delegates to the
+    deterministic workflow above instead (see build_diagnoses_workflow).
     """
     use_tool = state["use_tool"]
+    if use_tool and state.get("deterministic"):
+        logger.info("Diagnoses node: deterministic workflow (extract -> search once -> select)")
+        result = await _diagnoses_workflow.ainvoke({"transcript": state["transcript"]}, config=config)
+        return {"diagnoses": result["diagnoses"]}
+
     logger.info(
         "Diagnoses node: extracting diagnoses, ICD-10 tool %s",
         "enabled" if use_tool else "disabled",
@@ -444,8 +601,9 @@ async def diagnoses_node(state: ScribeState, config: RunnableConfig) -> dict:
 
 ALL_NODES = ["hpi", "vitals", "physical_exam", "diagnoses"]
 
-# Each node reads only `transcript`/`diagnoses_prompt`/`use_tool` from the initial
-# state, never another node's output, so any subset of ALL_NODES can run safely.
+# Each node reads only `transcript`/`diagnoses_prompt`/`use_tool`/`deterministic`
+# from the initial state, never another node's output, so any subset of
+# ALL_NODES can run safely.
 _NODE_SPECS = {
     "hpi": (hpi_node, hpi_prompt),
     "vitals": (vitals_node, vitals_prompt),
@@ -506,6 +664,7 @@ async def extract_note(
     transcript: str,
     diagnoses_prompt: str,
     use_tool: bool = False,
+    deterministic: bool = False,
     parallel: bool = False,
     cache: bool = False,
     nodes: list[str] | None = None,
@@ -516,6 +675,10 @@ async def extract_note(
     (ICD-10 tool when `use_tool`) run either sequentially (default, single local
     Ollama server) or in parallel (`parallel=True`, requires OLLAMA_NUM_PARALLEL
     >= 4); their results are combined here.
+
+    `deterministic` only matters when `use_tool` is set: it swaps the diagnoses
+    node's tool-calling agent for the deterministic extract/search/select
+    workflow (see build_diagnoses_workflow).
 
     `nodes` restricts which of ALL_NODES actually run (default: all four) — handy
     for fast iteration on a single node without paying for the others. Any node
@@ -535,11 +698,12 @@ async def extract_note(
         else build_sequential_graph(cache_backend, nodes)
     )
     logger.info(
-        "Running scribe graph (%s) over transcript (%d chars), nodes=%s, ICD-10 tool %s",
+        "Running scribe graph (%s) over transcript (%d chars), nodes=%s, ICD-10 tool %s%s",
         "parallel" if parallel else "sequential",
         len(transcript),
         ",".join(nodes),
         "enabled" if use_tool else "disabled",
+        " (deterministic)" if use_tool and deterministic else "",
     )
     start = time.perf_counter()
     final = await scribe_graph.ainvoke(
@@ -547,6 +711,7 @@ async def extract_note(
             "transcript": transcript,
             "diagnoses_prompt": diagnoses_prompt,
             "use_tool": use_tool,
+            "deterministic": deterministic,
         },
         config={
             "callbacks": get_callbacks(),
@@ -613,6 +778,17 @@ def parse_args() -> argparse.Namespace:
             "Give the agent the ICD-10 search tool to validate diagnosis codes. "
             "Defaults the diagnoses prompt to "
             f"{DIAGNOSES_PROMPT_WITH_TOOL_PATH}."
+        ),
+    )
+    parser.add_argument(
+        "--deterministic",
+        action="store_true",
+        help=(
+            "Only meaningful with --use-tool. Replaces the diagnoses node's "
+            "tool-calling agent with a fixed extract/search/select pipeline: the "
+            "model extracts candidates, the ICD-10 lookup runs directly in code "
+            "exactly once, then the model selects codes from those results — no "
+            "model-driven decision about whether or how many times to search."
         ),
     )
     parser.add_argument(
@@ -698,6 +874,7 @@ async def main() -> None:
         transcript,
         diagnoses_prompt,
         use_tool=args.use_tool,
+        deterministic=args.deterministic,
         parallel=args.parallel,
         cache=args.cache,
         nodes=nodes,
