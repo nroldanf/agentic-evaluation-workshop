@@ -11,37 +11,75 @@ El Señor de los Anillos.
 
 El agent lee la transcripción (transcript) de una consulta médico–paciente, usa un modelo local de Ollama ([`qwen3.5:9b`](https://ollama.com/library/qwen3.5:9b) por defecto) para extraer una nota clínica estructurada y la guarda en `outputs/`. La historia de la enfermedad actual (HPI), los signos vitales (vitals), el examen físico (physical exam) y los diagnósticos se extraen mediante nodes (nodos) separados, ejecutados de forma secuencial.
 
-Este repo es el material de un workshop: además del agent (`agent.py`) y sus evals (`evals/`), incluye dos notebooks de [marimo](https://marimo.io) que reconstruyen ambas piezas paso a paso — ver [Paso a paso del Workshop](#paso-a-paso-del-workshop).
+Este repo es el material de un workshop: además del agent (`agent.py`) y sus evals (`evals/`), incluye dos Jupyter notebooks que reconstruyen ambas piezas paso a paso — ver [Paso a paso del Workshop](#paso-a-paso-del-workshop).
+
+## Tabla de contenidos
+
+- [Arquitectura](#arquitectura)
+  - [Diagnósticos determinísticos (`--deterministic`)](#diagnósticos-determinísticos---deterministic)
+  - [Arquitectura de evaluación](#arquitectura-de-evaluación)
+    - [Code-based evals](#code-based-evals)
+    - [Golden dataset evals](#golden-dataset-evals)
+    - [Trajectory evals](#trajectory-evals)
+    - [LLM as a judge eval](#llm-as-a-judge-eval)
+- [Prerequisitos](#prerequisitos)
+- [Instrucciones de instalación](#instrucciones-de-instalación)
+- [Paso a paso del Workshop](#paso-a-paso-del-workshop)
+  - [Notebook 1 — Building an agent (`notebooks/1_building_an_agent.ipynb`)](#notebook-1--building-an-agent-notebooks1_building_an_agentipynb)
+  - [Notebook 2 — LLM as a judge (`notebooks/2_llm_as_judge_eval.ipynb`)](#notebook-2--llm-as-a-judge-notebooks2_llm_as_judge_evalipynb)
+- [Ejecutar el agente](#ejecutar-el-agente)
+  - [Validación de códigos ICD-10](#validación-de-códigos-icd-10)
+  - [Ejecutar solo algunos nodes](#ejecutar-solo-algunos-nodes)
+  - [Caching de nodos](#caching-de-nodos)
+- [Configuración](#configuración)
+- [Prompts](#prompts)
+- [Tracing (opcional)](#tracing-opcional)
+  - [Levantar Langfuse localmente](#levantar-langfuse-localmente)
+    - [Generar tus propias keys y secrets (opcional)](#generar-tus-propias-keys-y-secrets-opcional)
+- [Evals](#evals)
+  - [HPI LLM-as-a-Judge](#hpi-llm-as-a-judge)
+    - [Modelo juez](#modelo-juez)
+  - [Clinical Note Dataset Eval (HPI + Physical Exam)](#clinical-note-dataset-eval-hpi--physical-exam)
+  - [Evals determinísticos (diagnósticos, vitals, trayectoria)](#evals-determinísticos-diagnósticos-vitals-trayectoria)
+- [Autores](#autores)
 
 ## Arquitectura
 
-Cuantro diferentes agentes extraen parte de la nota clínica, cada uno con su propio prompt y esquema de salida, todos construidos con una única función `build_agent`:
+Cuatro diferentes agentes extraen parte de la nota clínica de manera independiente, cada uno con su propio prompt y esquema de salida, todos construidos con una única función `build_agent`:
 
 - **hpi node** (`HistoryOfPresentIllness`): redacta la historia de la enfermedad actual como un párrafo narrativo cronológico. Sin usar `herramientas`.
 - **vitals node** (`VitalSigns`): extrae los signos vitales, concretamente temperatura, presión arterial, frecuencia cardíaca y frecuencia respiratoria. Sin usar `herramientas`.
 - **physical exam node** (`PhysicalExam`): documenta los hallazgos **objetivos** del examen físico (lo observado/medido por el clínico, no los síntomas referidos por el paciente), agrupados por sistema corporal. El sistema se restringe a un enum fijo (`PhysicalExamSystem`: general, heent, neck, cardiovascular, respiratory, …). Sin tools.
-- **diagnoses node** (`DiagnosesOutput`): extrae los diagnósticos diferenciales (los 3 más relevantes) y una lista de diagnosticos finales en `assessment`. Cuenta con dos versiones: una sin herramientas, que solo extrae los diagnósticos sin verificar los códigos ICD-10, y otra con herramientas (--use-tool), que valida los códigos contra un catálogo de ICD-10-CM en memoria. La versión con herramientas puede ejecutarse de dos formas: con tool-calling (por defecto) o, con `--deterministic`, mediante un pipeline fijo de tres pasos (ver más abajo).
+- **diagnoses node** (`DiagnosesOutput`): extrae los diagnósticos diferenciales (los 3 más relevantes) y una lista de diagnósticos finales en `assessment`. Cuenta con dos versiones: una sin herramientas, que solo extrae los diagnósticos sin verificar los códigos ICD-10, y otra con herramientas (--use-tool), que valida los códigos contra un catálogo de ICD-10-CM en memoria. La versión con herramientas puede ejecutarse de dos formas: con tool-calling (por defecto) o, con `--deterministic`, mediante un pipeline fijo de tres pasos (ver [Diagnósticos determinísticos](#diagnósticos-determinísticos---deterministic)).
 
-Sus salidas se combinan en un único `ClinicalNote`.
+> **Nota:** los cuatro nodos del grafo son independientes entre sí, cada uno solo lee
+> `transcript` del estado compartido, ninguno consume la salida de otro y
+> sus resultados se combinan recién al final en un único `ClinicalNote`. Se
+> ejecutan en este orden (1→2→3→4) únicamente porque el grafo hace una
+> llamada a la vez contra un único servidor local de Ollama, no porque un
+> node necesite el resultado del anterior.
+>
+> Por eso `--only`/`--skip` puede correr cualquier subconjunto sin romper
+> nada (ver [Ejecutar solo algunos nodes](#ejecutar-solo-algunos-nodes)).
 
 ```mermaid
 flowchart LR
-    S([START]) --> H["hpi node<br/>(HistoryOfPresentIllness)"]
-    H --> V["vitals node<br/>(VitalSigns)"]
-    V --> P["physical exam node<br/>(PhysicalExam)"]
-    P --> D["diagnoses node<br/>(DiagnosesOutput)"]
-    D --> E([END])
+    Tr[("transcript")]
+    Tr --> H["1. hpi node<br/>(HistoryOfPresentIllness)"]
+    Tr --> V["2. vitals node<br/>(VitalSigns)"]
+    Tr --> P["3. physical exam node<br/>(PhysicalExam)"]
+    Tr --> D["4. diagnoses node<br/>(DiagnosesOutput)"]
+    H --> CN(["ClinicalNote"])
+    V --> CN
+    P --> CN
+    D --> CN
     D -.->|"--use-tool"| T["search_icd10_codes_batch"]
     T -.-> D
 ```
 
 ### Diagnósticos determinísticos (`--deterministic`)
 
-Con `--use-tool --deterministic`, el diagnoses node reemplaza el agent con
-tool-calling por un pipeline fijo de tres pasos, para que la búsqueda de
-ICD-10 ocurra exactamente una vez, en código, en vez de quedar a discreción
-del modelo (que en la versión con tool-calling podía repetir o reformular la
-búsqueda varias veces antes de converger):
+Con `--use-tool --deterministic`, el nodo de diagnósticos reemplaza el agente con tool-calling por un pipeline fijo de tres pasos, para que la búsqueda de ICD-10 ocurra exactamente una vez, en código, en vez de quedar a discreción del modelo (que en la versión con tool-calling podía repetir o reformular la búsqueda varias veces antes de converger):
 
 ```mermaid
 flowchart LR
@@ -51,15 +89,9 @@ flowchart LR
     SD --> E([END])
 ```
 
-1. **`extract_candidates`** — un LLM sin tools lista cada diagnóstico candidato
-   discutido o implícito en el transcript (tanto diferenciales como
-   assessment), junto con un `search_term` corto para buscarlo.
-2. **`search_candidates`** — código puro: busca cada `search_term` una única
-   vez contra el catálogo de ICD-10 (sin LLM de por medio).
-3. **`select_diagnoses`** — un LLM (con reasoning habilitado) recibe el
-   transcript original junto a los resultados ya buscados de cada candidato, y
-   elige el código correcto de entre esos resultados — o descarta el
-   candidato si ninguno es un match genuino — y consolida el resultado final.
+1. **`extract_candidates`**: un LLM sin tools lista cada diagnóstico candidato discutido o implícito en el transcript (tanto diferenciales como assessment), junto con un `search_term` corto para buscarlo.
+2. **`search_candidates`**: código puro: busca cada `search_term` una única vez contra el catálogo de ICD-10 (sin LLM de por medio).
+3. **`select_diagnoses`**: un LLM (con reasoning habilitado) recibe el transcript original junto a los resultados ya buscados de cada candidato, y elige el código correcto de entre esos resultados — o descarta el candidato si ninguno es un match genuino — y consolida el resultado final.
 
 ```bash
 uv run python agent.py --use-tool --deterministic
@@ -67,51 +99,144 @@ uv run python agent.py --use-tool --deterministic
 
 ### Arquitectura de evaluación
 
-Diagnósticos y vitals se evalúan de forma determinista (comparación campo por
-campo contra un golden record); el HPI y el physical exam son texto libre, así
-que se evalúan con un **judge** — un segundo modelo (LLM-as-a-Judge) que lee el
-transcript y la salida y la califica, igual que lo haría un revisor humano. Los
-resultados de ambos caminos se adjuntan a [Langfuse](https://langfuse.com) como
-Scores, para poder compararlos entre corridas en la UI:
+El sistema de evaluación tiene diferentes capas: cada tipo de salida (HPI, physical exam, vitals, diagnósticos) tiene su propia evaluación, y cada evaluación puede usar una o varias técnicas distintas.
+
+#### Code-based evals
+
+Assertions de pass/fail directamente sobre las salidas, sin ningún LLM de
+por medio:
+
+- **Validación de esquema (LangGraph)** — `create_agent(response_format=...)`
+  ya valida cada salida contra su modelo de Pydantic (`models.py`) antes de
+  que exista un resultado: un HPI, unos vitals o un diagnóstico mal formado
+  ni siquiera llegan a ser un `ClinicalNote`.
+- **Presencia y límites estructurales** — `eval_diagnosis_list_limits()` en
+  `evals/eval_diagnoses.py` revisa que `assessment`/`differential_diagnoses`
+  respeten los límites que exige el prompt (máximo 3 cada uno, `assessment`
+  nunca vacío).
+- **Plausibilidad fisiológica** — `eval_vitals_plausibility()` en
+  `evals/eval_vitals.py` detecta valores imposibles (p. ej. una temperatura
+  en Fahrenheit metida en un campo en Celsius, o una frecuencia cardíaca de
+  900); no necesita ningún golden record.
+- **Códigos ICD-10 reales** — `eval_diagnoses()` valida que cada código
+  asignado exista de verdad en el catálogo de `ICD10_DB.parquet`, en vez de
+  haber sido inventado de memoria por el modelo.
+
+#### Golden dataset evals
+
+Compara la salida extraída contra un golden record: los valores esperados
+(HPI, vitals, physical exam, diagnósticos y, para el caso de Bilbo, los
+tool calls esperados) que un profesional de salud revisó y dejó fijados en
+`data/golden/golden_encounter_*.json` / `golden_case_bilbo_trivial.json`.
+
+- `eval_diagnoses()` (`evals/eval_diagnoses.py`) — precision/recall de los
+  códigos ICD-10 extraídos contra los del golden, y si el texto del
+  diagnóstico corresponde de verdad a ese código.
+- `eval_vitals()` (`evals/eval_vitals.py`) — presencia (precision/recall) y
+  exactitud numérica de los cinco signos vitales contra el golden.
+- `pe_precision_recall_evaluator` (`evals/eval_clinical_note_dataset.py`) —
+  cobertura de sistemas corporales del physical exam contra un set de
+  referencia por encuentro.
+
+#### Trajectory evals
+
+Evalúa el camino que siguió el agent, no solo su respuesta final: inspecciona
+la traza de tool calls (qué herramienta llamó, cuántas veces, con qué
+argumentos) y los cambios de estado, comparándolos contra los
+`expected_tool_calls` del golden. `evals/eval_trajectory.py` revisa cuatro
+cosas — conteo de llamadas, contenido esperado en los argumentos, contenido
+*prohibido* en los argumentos (p. ej. que nunca busque un diagnóstico que el
+golden espera ausente) y llamadas a herramientas que no debieron ocurrir —
+usando el caso de Bilbo (`golden_case_bilbo_trivial.json`), diseñado
+específicamente para probar el uso eficiente de la herramienta de ICD-10.
+
+#### LLM as a judge eval
+
+Para el HPI y el physical exam — texto libre, sin una única versión
+"correcta" contra la cual hacer diff — un **judge**, un LLM externo y
+distinto al generador, califica la salida contra una rúbrica pensada en lo
+que un profesional de salud espera de una nota médica (Accuracy,
+Completeness, Tone — ver `prompts/hpi_judge_prompt.txt` /
+`prompts/physical_exam_judge_prompt.txt`). `evals/eval_hpi_judge.py` y
+`evals/eval_clinical_note_dataset.py` lo corren contra Amazon Bedrock (con
+fallback a Ollama local) y adjuntan los scores a Langfuse. El notebook 2
+(`notebooks/2_llm_as_judge_eval.ipynb`) lo muestra corriendo en vivo, celda por
+celda — ver [Paso a paso del Workshop](#paso-a-paso-del-workshop).
+
+Solo el judge y `pe_precision`/`pe_recall` (el golden dataset eval del
+physical exam) se adjuntan hoy a [Langfuse](https://langfuse.com) como
+Scores; el resto de los code-based, golden dataset y trajectory evals son
+funciones puras que se corren aparte (ver [Evals](#evals)):
 
 ```mermaid
 flowchart LR
-    Tr[transcript] --> HN["hpi node"]
+    Tr[("transcript")] --> HN["hpi node"]
+    Tr --> VN["vitals node"]
     Tr --> PN["physical exam node"]
     Tr --> DN["diagnoses node"]
-    Tr --> VN["vitals node"]
 
-    HN --> HJ["judge<br/>(Bedrock, fallback a Ollama)"]
-    PN --> PJ["judge<br/>(Bedrock, fallback a Ollama)"]
+    subgraph L1["Code-based evals"]
+        SchemaVal["response_format=...<br/>(esquema, LangGraph)"]
+        ListLimits["eval_diagnosis_list_limits()"]
+        VitalsPlaus["eval_vitals_plausibility()"]
+        CodesReal["eval_diagnoses()<br/>(códigos reales en catálogo)"]
+    end
+
+    subgraph L2["Golden dataset evals"]
+        DiagGolden["eval_diagnoses()<br/>(precision/recall)"]
+        VitalsGolden["eval_vitals()"]
+        PEGolden["pe_precision_recall_evaluator"]
+    end
+
+    subgraph L3["Trajectory evals"]
+        TrajEval["eval_trajectory.py"]
+    end
+
+    subgraph L4["LLM as a judge eval"]
+        HJ["judge (HPI)<br/>Bedrock, fallback Ollama"]
+        PJ["judge (physical exam)<br/>Bedrock, fallback Ollama"]
+    end
+
+    HN --> SchemaVal
+    VN --> SchemaVal
+    PN --> SchemaVal
+    DN --> SchemaVal
+
+    DN --> ListLimits
+    DN --> CodesReal
+    VN --> VitalsPlaus
+
+    DN --> DiagGolden
+    VN --> VitalsGolden
+    PN --> PEGolden
+
+    DN -.->|"trace de tool calls"| TrajEval
+
+    HN --> HJ
+    PN --> PJ
     Tr -.-> HJ
     Tr -.-> PJ
 
-    PN --> PR["pe_precision / pe_recall<br/>(código, sin LLM)"]
-    DN --> ED["eval_diagnoses.py<br/>(código, sin LLM)"]
-    VN --> EV["eval_vitals.py<br/>(código, sin LLM)"]
+    G[("golden_encounter_*.json /<br/>golden_case_bilbo_trivial.json")] -.-> DiagGolden
+    G -.-> VitalsGolden
+    G -.-> PEGolden
+    G -.-> TrajEval
 
-    G[("data/golden/<br/>golden_encounter_*.json")] -.-> PR
-    G -.-> ED
-    G -.-> EV
-
-    HJ --> LF[("Langfuse<br/>Scores / Experiment")]
+    PEGolden --> LF[("Langfuse<br/>Scores / Experiment")]
+    HJ --> LF
     PJ --> LF
-    PR --> LF
-    ED --> LF2[("Score local /<br/>comparación manual")]
-    EV --> LF2
-```
 
-> **Diagrama de arquitectura (Excalidraw).** Espacio reservado para el
-> diagrama de Mafe hecho en [Excalidraw](https://excalidraw.com/) con la
-> arquitectura completa de agent + evaluación — agregar acá el embed/imagen
-> cuando esté listo.
->
-> <!-- TODO: pegar acá el link/imagen del diagrama de Excalidraw de Mafe -->
+    ListLimits --> LF2[("Score local /<br/>comparación manual")]
+    VitalsPlaus --> LF2
+    CodesReal --> LF2
+    DiagGolden --> LF2
+    VitalsGolden --> LF2
+    TrajEval --> LF2
+```
 
 ## Prerequisitos
 
-Para correr el workshop completo (agent + Langfuse local + los dos notebooks)
-necesitás:
+Para correr el workshop completo (agent + Langfuse local + los dos notebooks) se necesitan:
 
 - **Docker**, con soporte para Compose v2 (el comando `docker compose`, con
   espacio, no el viejo `docker-compose`) — ya sea [Docker Desktop](https://www.docker.com/products/docker-desktop/)
@@ -131,15 +256,15 @@ necesitás:
 
 ## Instrucciones de instalación
 
-1. Copiá `.env.example` a `.env` (todos los defaults ya alcanzan para una
+1. Copia `.env.example` a `.env` (todos los defaults ya alcanzan para una
    instancia local de un solo uso; ver [Tracing (opcional)](#tracing-opcional)
-   si querés generar tus propios secrets):
+   si quieres generar tus propios secrets):
 
    ```bash
    cp .env.example .env
    ```
 
-2. Levantá Langfuse localmente (tracing + Scores + Experiments de las evals):
+2. Levanta Langfuse localmente (tracing + Scores + Experiments de las evals):
 
    ```bash
    docker compose up --build -d
@@ -150,37 +275,37 @@ necesitás:
    del stack (`langfuse-web`, `langfuse-worker`, `postgres`, `clickhouse`,
    `redis`, `minio`) y cómo bajarlo.
 
-3. Instalá las dependencias de Python con [uv](https://docs.astral.sh/uv/):
+3. Instala las dependencias de Python con [uv](https://docs.astral.sh/uv/):
 
    ```bash
    uv sync
    ```
 
-4. Descargá con Ollama los modelos que usa el workshop:
+4. Descarga con Ollama los modelos que usa el workshop:
 
    ```bash
    ollama pull qwen3.5:9b        # generador: los cuatro nodes del agent
    ollama pull mistral:latest    # judge de fallback, si Bedrock no está disponible
    ```
 
-Con eso ya podés correr el agent (`uv run python agent.py --help`) y los dos
+Con eso ya puedes correr el agent (`uv run python agent.py --help`) y los dos
 notebooks del workshop.
 
 ## Paso a paso del Workshop
 
-Los dos notebooks viven en `notebooks/` y se abren con marimo:
+Los notebooks viven en `notebooks/` y son `.ipynb` estándar — se abren con
+Jupyter o con la extensión de Jupyter de VS Code / PyCharm:
 
 ```bash
-uv run marimo edit notebooks/1_building_an_agent.py
-uv run marimo edit notebooks/2_llm_as_judge_eval.py
+uv run --with jupyter jupyter lab notebooks/1_building_an_agent.ipynb
+uv run --with jupyter jupyter lab notebooks/2_llm_as_judge_eval.ipynb
 ```
 
-(`marimo edit` abre el notebook en modo interactivo, celda por celda; marimo
-usa el directorio del propio notebook —`notebooks/`— como working directory,
-por eso las rutas dentro de cada notebook son relativas a esa carpeta y no a
-la raíz del repo).
+(el kernel de Jupyter arranca con el directorio del propio notebook
+—`notebooks/`— como working directory, por eso las rutas dentro de cada
+notebook son relativas a esa carpeta y no a la raíz del repo).
 
-### Notebook 1 — Building an agent (`notebooks/1_building_an_agent.py`)
+### Notebook 1 — Building an agent (`notebooks/1_building_an_agent.ipynb`)
 
 Reconstruye el agent de `agent.py` pieza por pieza, corriendo cada pieza **en
 vivo** contra un transcript real (encuentro `RIV-001`) — sin resultados
@@ -206,7 +331,7 @@ precalculados. Cubre, en orden:
 5. **Componer los nodes en un grafo** — cómo `agent.py` conecta los cuatro
    nodes en un `StateGraph` de LangGraph y ensambla el `ClinicalNote` final.
 
-### Notebook 2 — LLM as a judge (`notebooks/2_llm_as_judge_eval.py`)
+### Notebook 2 — LLM as a judge (`notebooks/2_llm_as_judge_eval.ipynb`)
 
 Toma el HPI y el physical exam generados por el notebook 1 y pregunta si son
 *buenos* — la parte que un diff determinista no puede responder, porque
@@ -246,14 +371,16 @@ esos scripts contra Langfuse de verdad.
 
 ## Ejecutar el agente
 
-Ejecuta con el transcript de ejemplo (se muestran los valores por defecto):
+El transcript es un argumento posicional obligatorio (no tiene valor por
+defecto). Ejecútalo, por ejemplo, con el encuentro `RIV-001`:
 
 ```bash
-uv run python agent.py
+uv run python agent.py data/encounter_riv001.txt
 ```
 
-Esto lee `data/transcript.txt`, imprime el `ClinicalNote` extraído y lo escribe
-en `outputs/clinical_note.json`.
+Esto imprime el `ClinicalNote` extraído y lo escribe en
+`outputs/clinical_note.json` (la ruta de salida sí tiene ese valor por
+defecto).
 
 Puedes pasar tu propio transcript, un diagnoses prompt distinto y/o una ruta de
 salida:
@@ -278,9 +405,9 @@ uv run python agent.py --use-tool
 ### Ejecutar solo algunos nodes
 
 Los cuatro nodes son independientes entre sí (ninguno depende de la salida de
-otro), así que podés correr solo un subconjunto con `--only`, o excluir
+otro), así que puedes correr solo un subconjunto con `--only`, o excluir
 algunos con `--skip` — útil para iterar rápido sobre un node (p. ej. mientras
-ajustás un prompt) sin pagar el costo de correr los demás:
+ajustas un prompt) sin pagar el costo de correr los demás:
 
 ```bash
 uv run python agent.py --only hpi
@@ -331,6 +458,13 @@ Defínelas en `.env` (ver `.env.example`) o de forma inline:
 - `LLM_MAX_RETRIES` — reintentos de una llamada al modelo fallida, p. ej. una
   respuesta estructurada vacía, antes de rendirse (por defecto `5`; usa backoff
   exponencial).
+- `MODEL_CALL_LIMIT` — techo de llamadas al modelo por node antes de fallar
+  rápido en vez de quedar en un bucle silencioso (por defecto `8`).
+- `DIAGNOSES_MODEL_CALL_LIMIT` — el mismo techo, pero para el diagnoses node
+  cuando `--use-tool` está activo (por defecto `20`; ese camino necesita más
+  turnos que los demás nodes).
+- `ICD10_DB_PATH` — ruta al catálogo de ICD-10-CM en `.parquet` contra el que
+  se validan los códigos (por defecto `data/ICD10_DB.parquet`).
 - `LANGGRAPH_CACHE_DIR` — directorio del cache de nodos en disco, usado con
   `--cache` (por defecto `.cache/scribe`).
 - `LANGGRAPH_CACHE_TTL` — TTL en segundos para los resultados cacheados
@@ -391,15 +525,15 @@ docker compose down          # conserva los datos (volumes)
 docker compose down -v       # borra también los volumes (reset completo)
 ```
 
-Si preferís no auto-provisionar nada y crear el org/project/user a mano desde
-la UI, comentá `LANGFUSE_INIT_ORG_ID` en `.env` — es el interruptor maestro:
+Si prefieres no auto-provisionar nada y crear el org/project/user a mano desde
+la UI, comenta `LANGFUSE_INIT_ORG_ID` en `.env` — es el interruptor maestro:
 sin él, Langfuse no crea nada aunque el resto de `LANGFUSE_INIT_*` esté
 definido.
 
 #### Generar tus propias keys y secrets (opcional)
 
 Los defaults de `.env.example` son solo para una instancia local de un solo
-uso. Si vas a compartir esta instancia con alguien más, o querés un proyecto
+uso. Si vas a compartir esta instancia con alguien más, o quieres un proyecto
 Langfuse propio en vez del dummy sembrado, genera tus propios valores.
 Ningún valor real debe vivir en `docker-compose.yml` (queda trackeado en
 git); todos van en tu `.env` local (gitignored). Comandos para generar cada
@@ -437,7 +571,7 @@ raíz del repo, no desde adentro de `evals/`, para que sus paths relativos a
 - `evals/eval_hpi_judge.py` / `evals/eval_clinical_note_dataset.py` — LLM-as-a-Judge,
   requieren Langfuse + un juez (Bedrock u Ollama). Comparten la selección de
   modelo juez vía `evals/judge_client.py` (no se corre directamente). El
-  notebook 2 (`notebooks/2_llm_as_judge_eval.py`) muestra esta misma lógica
+  notebook 2 (`notebooks/2_llm_as_judge_eval.ipynb`) muestra esta misma lógica
   corriendo en vivo, celda por celda — ver [Paso a paso del Workshop](#paso-a-paso-del-workshop).
 - `evals/eval_diagnoses.py` / `evals/eval_vitals.py` / `evals/eval_trajectory.py` —
   funciones puras, sin Langfuse ni LLM.
@@ -451,7 +585,7 @@ Langfuse) contra su transcript, en tres dimensiones — 0 a 4 cada una, ver
 documentación clínica). Adjunta los resultados de vuelta a Langfuse como
 Scores (`hpi_accuracy`, `hpi_completeness`, `hpi_tone`).
 
-Requiere una traza existente con un node `hpi` — corré `agent.py` con
+Requiere una traza existente con un node `hpi` — corre `agent.py` con
 tracing habilitado (ver arriba) al menos una vez antes.
 
 ```bash
@@ -479,6 +613,8 @@ Variables de entorno (ver `.env.example`, sección `HPI LLM-AS-A-JUDGE`):
 - `AWS_REGION` — región de Bedrock (por defecto `us-east-1`).
 - `JUDGE_FALLBACK_OLLAMA_MODEL` — modelo local de respaldo (por defecto
   `mistral:latest`); debe ser distinto de `OLLAMA_MODEL`.
+- `AWS_PROFILE` — perfil de AWS para las llamadas a Bedrock (opcional; por
+  defecto usa el perfil ya activo en el entorno).
 
 ### Clinical Note Dataset Eval (HPI + Physical Exam)
 
@@ -511,8 +647,10 @@ Requiere Langfuse corriendo (ver arriba) y el mismo juez que `evals/eval_hpi_jud
 
 `evals/eval_diagnoses.py`, `evals/eval_vitals.py` y `evals/eval_trajectory.py`
 son funciones puras — sin llamadas a Langfuse ni a ningún LLM — que comparan
-una nota clínica extraída (p. ej. `outputs/encounter_2.json`, generado por
-`agent.py`) o una traza de tool calls contra un `golden_encounter_*.json`.
+una nota clínica extraída (p. ej. `outputs/encounter_riv001.json`, generado por
+`agent.py`) contra su golden correspondiente por `encounter_id`
+(`data/golden/golden_encounter_riv001.json`), o una traza de tool calls contra
+`golden_case_bilbo_trivial.json` (`expected_tool_calls`).
 Por ahora no tienen CLI propia: se importan y se llaman desde tu propio
 script, REPL o notebook (`evals/run_evals.py` es un stub vacío, pensado como
 futuro punto de entrada para correr los tres a la vez).
