@@ -76,7 +76,6 @@ def get_callbacks() -> list:
     return [CallbackHandler()]
 
 
-TRANSCRIPT_PATH = Path("data/transcript.txt")
 OUTPUT_PATH = Path("outputs/clinical_note.json")
 SYSTEM_PROMPT_PATH = Path("prompts/system_prompt.txt")
 DIAGNOSES_PROMPT_PATH = Path("prompts/diagnoses_prompt.txt")
@@ -718,8 +717,7 @@ def parse_args() -> argparse.Namespace:
         "transcript",
         nargs="?",
         type=Path,
-        default=TRANSCRIPT_PATH,
-        help=f"Path to the transcript text file (default: {TRANSCRIPT_PATH}).",
+        help=f"Path to the transcript text file.",
     )
     parser.add_argument(
         "-d",
