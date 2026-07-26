@@ -1,6 +1,5 @@
 [
-  {"tool": "get_patient_history", "args": {"query": "Frodo Baggins"}},
-  {"tool": "lookup_icd10", "args": {"query": "dehydration"}},
-  {"tool": "lookup_icd10", "args": {"query": "possible PTSD symptoms"}},
+  {"tool": "search_icd10_codes_batch", "args": {"diagnosis_names": ["dehydration"]}},
+  {"tool": "search_icd10_codes_batch", "args": {"diagnosis_names": ["possible PTSD symptoms"]}},
   {"tool": "search_icd10_codes_batch", "args": {"diagnosis_names": ["malnutrition"]}}
 ]
